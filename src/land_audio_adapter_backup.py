@@ -5,15 +5,8 @@ import joblib
 import json
 from datetime import datetime
 
-import os
 
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-
-MODEL_PATH = os.path.join(
-    BASE_DIR,
-    "models",
-    "land_audio_model.joblib"
-)
+MODEL_PATH = "models/land_audio_model.joblib"
 SUPPORTED_AUDIO_EXTENSIONS = (".wav", ".mp3", ".flac", ".ogg", ".m4a")
 
 
@@ -23,8 +16,8 @@ model = joblib.load(MODEL_PATH)
 
 def extract_features(file_path):
     """
-    Convert an audio file into the same 80-feature
-    representation used during model training.
+    Convert an audio file into the same 40 MFCC features
+    used during model training.
     """
 
     y, sr = librosa.load(
@@ -33,25 +26,13 @@ def extract_features(file_path):
         mono=True
     )
 
-    y = y / (np.max(np.abs(y)) + 1e-9)
-
     mfcc = librosa.feature.mfcc(
         y=y,
         sr=sr,
         n_mfcc=40
     )
 
-    mfcc_mean = np.mean(mfcc, axis=1)
-    mfcc_std = np.std(mfcc, axis=1)
-
-    delta = librosa.feature.delta(mfcc)
-    delta_mean = np.mean(delta, axis=1)
-
-    features = np.hstack([
-    mfcc_mean,
-    mfcc_std,
-    delta_mean
-])
+    features = np.mean(mfcc, axis=1)
 
     return features
 
@@ -76,9 +57,7 @@ def classify_audio(file_path, sensor_id="S01", location=None):
     # Get confidence
     probabilities = model.predict_proba(features)[0]
     confidence = float(np.max(probabilities))
-    dangerous = ["chainsaw", "gunshot"]
-
-    if prediction in dangerous and confidence < 0.60:
+    if confidence < 0.60:
         prediction = "unknown"
 
     # Create normalized event

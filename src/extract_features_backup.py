@@ -13,19 +13,7 @@ CLASSES = [
 
 
 def extract_features(file_path):
-    """
-    Convert an audio file into the same 80-feature
-    representation used during model training.
-    """
-
-    y, sr = librosa.load(
-        file_path,
-        sr=22050,
-        mono=True
-    )
-
-    # Normalize audio volume
-    y = y / (np.max(np.abs(y)) + 1e-9)
+    y, sr = librosa.load(file_path, sr=22050, mono=True)
 
     mfcc = librosa.feature.mfcc(
         y=y,
@@ -33,17 +21,7 @@ def extract_features(file_path):
         n_mfcc=40
     )
 
-    mfcc_mean = np.mean(mfcc, axis=1)
-    mfcc_std = np.std(mfcc, axis=1)
-
-    delta = librosa.feature.delta(mfcc)
-    delta_mean = np.mean(delta, axis=1)
-
-    features = np.hstack([
-    mfcc_mean,
-    mfcc_std,
-    delta_mean
-])
+    features = np.mean(mfcc, axis=1)
 
     return features
 

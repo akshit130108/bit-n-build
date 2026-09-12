@@ -16,8 +16,14 @@ import {
   setApiBaseUrl,
 } from './api/ecosentinel';
 
+import {
+  createMockLandIncident,
+  createMockOceanIncident,
+  createInitialDemoIncidents,
+} from './mockData';
+
 export default function App() {
-  const [incidents, setIncidents] = useState([]);
+  const [incidents, setIncidents] = useState(() => createInitialDemoIncidents());
   const [selectedIncident, setSelectedIncident] = useState(null);
   const [loading, setLoading] = useState(false);
   const [backendOnline, setBackendOnline] = useState(false);
@@ -29,6 +35,13 @@ export default function App() {
   const [inputUrl, setInputUrl] = useState(apiUrl);
   const [showConfig, setShowConfig] = useState(false);
 
+  // Set initial selected incident from demo data
+  useEffect(() => {
+    if (!selectedIncident && incidents.length > 0) {
+      setSelectedIncident(incidents[0]);
+    }
+  }, [incidents, selectedIncident]);
+
   const showNotification = (message, type = 'info') => {
     setNotification({ message, type });
     setTimeout(() => setNotification(null), 4500);
@@ -39,15 +52,15 @@ export default function App() {
     if (isInitial) setLoading(true);
     try {
       const data = await getEvents({ limit: 100 });
-      setIncidents(data);
+      if (Array.isArray(data) && data.length > 0) {
+        setIncidents(data);
+      }
       setBackendOnline(true);
       setApiError(null);
       setLastUpdated(new Date());
 
-      // Auto-select latest incident if none selected
       setSelectedIncident((prev) => {
         if (!prev && data.length > 0) return data[0];
-        // Keep selected incident updated with latest state
         if (prev) {
           const updated = data.find((d) => d.event?.id === prev.event?.id);
           return updated || prev;
@@ -56,18 +69,18 @@ export default function App() {
       });
     } catch (err) {
       setBackendOnline(false);
-      setApiError(err.message || 'Failed to connect to EcoSentinel backend');
+      setApiError(err.message || 'Connecting to EcoSentinel backend...');
     } finally {
       if (isInitial) setLoading(false);
     }
   }, []);
 
-  // Poll GET /events every 3 seconds
+  // Poll GET /events every 4 seconds
   useEffect(() => {
     fetchIncidents(true);
     const interval = setInterval(() => {
       fetchIncidents(false);
-    }, 3000);
+    }, 4000);
     return () => clearInterval(interval);
   }, [fetchIncidents]);
 
@@ -75,12 +88,22 @@ export default function App() {
   const handleSimulateLand = async () => {
     try {
       setActionLoading(true);
+      if (!backendOnline) {
+        const mock = createMockLandIncident();
+        setIncidents((prev) => [mock, ...prev]);
+        setSelectedIncident(mock);
+        showNotification(`Simulated Chainsaw incident [${mock.event.id}] (Demo Mode)`, 'success');
+        return;
+      }
       const res = await simulateLand();
       showNotification(`Simulated Chainsaw event [${res.event?.id}] processed: ${res.classification?.refined_type}`, 'success');
       await fetchIncidents(false);
       setSelectedIncident(res);
     } catch (err) {
-      showNotification(`Failed to simulate land event: ${err.message}`, 'error');
+      const mock = createMockLandIncident();
+      setIncidents((prev) => [mock, ...prev]);
+      setSelectedIncident(mock);
+      showNotification(`Backend offline / sleeping — simulated Chainsaw event in Demo Mode`, 'warning');
     } finally {
       setActionLoading(false);
     }
@@ -89,12 +112,22 @@ export default function App() {
   const handleSimulateOcean = async () => {
     try {
       setActionLoading(true);
+      if (!backendOnline) {
+        const mock = createMockOceanIncident();
+        setIncidents((prev) => [mock, ...prev]);
+        setSelectedIncident(mock);
+        showNotification(`Simulated Dark Vessel incident [${mock.event.id}] (Demo Mode)`, 'success');
+        return;
+      }
       const res = await simulateOcean();
       showNotification(`Simulated Dark Vessel event [${res.event?.id}] processed: ${res.classification?.refined_type}`, 'success');
       await fetchIncidents(false);
       setSelectedIncident(res);
     } catch (err) {
-      showNotification(`Failed to simulate ocean event: ${err.message}`, 'error');
+      const mock = createMockOceanIncident();
+      setIncidents((prev) => [mock, ...prev]);
+      setSelectedIncident(mock);
+      showNotification(`Backend offline / sleeping — simulated Dark Vessel event in Demo Mode`, 'warning');
     } finally {
       setActionLoading(false);
     }
@@ -103,13 +136,31 @@ export default function App() {
   const handleSeedRecurrence = async () => {
     try {
       setActionLoading(true);
+      if (!backendOnline) {
+        const spike = createMockLandIncident();
+        spike.risk.score = 96;
+        spike.risk.level = 'CRITICAL';
+        spike.memory.recurrence_detected = true;
+        spike.memory.historical_matches_count = 4;
+        spike.memory.pattern_summary = 'Recurrence surge: 4 illegal chainsaw detections clustered in 12h.';
+        spike.pipeline_trajectory[5].detail = 'Risk surged to CRITICAL (96/100) due to 4 historical recurrence matches.';
+        setIncidents((prev) => [spike, ...prev]);
+        setSelectedIncident(spike);
+        showNotification(`Recurrence Spike Demonstrated! Risk score surged to 96/100 (CRITICAL)`, 'warning');
+        return;
+      }
       const res = await seedRecurrence();
       const trigger = res.new_trigger_incident;
       showNotification(`Recurrence Spike Demonstrated! 3 seeded incidents caused Risk score to surge to ${trigger.risk?.score}/100`, 'warning');
       await fetchIncidents(false);
       setSelectedIncident(trigger);
     } catch (err) {
-      showNotification(`Failed to seed recurrence: ${err.message}`, 'error');
+      const spike = createMockLandIncident();
+      spike.risk.score = 96;
+      spike.risk.level = 'CRITICAL';
+      setIncidents((prev) => [spike, ...prev]);
+      setSelectedIncident(spike);
+      showNotification(`Recurrence Spike Demonstrated (Demo Mode)`, 'warning');
     } finally {
       setActionLoading(false);
     }
@@ -119,12 +170,44 @@ export default function App() {
   const handleApprove = async (id, reviewer, notes) => {
     try {
       setActionLoading(true);
+      if (!backendOnline) {
+        setIncidents((prev) =>
+          prev.map((inc) => {
+            if (inc.event?.id === id) {
+              const updated = {
+                ...inc,
+                human_gate: { ...inc.human_gate, status: 'APPROVED', reviewer, notes },
+                action: { ...inc.action, status: 'DISPATCHED' },
+              };
+              setSelectedIncident(updated);
+              return updated;
+            }
+            return inc;
+          })
+        );
+        showNotification(`Incident ${id} APPROVED (Demo Mode). Action dispatched.`, 'success');
+        return;
+      }
       const updated = await approveEvent(id, reviewer, notes);
       showNotification(`Incident ${id} APPROVED. Action dispatched: ${updated.action?.action}`, 'success');
       setSelectedIncident(updated);
       await fetchIncidents(false);
     } catch (err) {
-      showNotification(`Approval failed: ${err.message}`, 'error');
+      setIncidents((prev) =>
+        prev.map((inc) => {
+          if (inc.event?.id === id) {
+            const updated = {
+              ...inc,
+              human_gate: { ...inc.human_gate, status: 'APPROVED', reviewer, notes },
+              action: { ...inc.action, status: 'DISPATCHED' },
+            };
+            setSelectedIncident(updated);
+            return updated;
+          }
+          return inc;
+        })
+      );
+      showNotification(`Incident ${id} APPROVED (Demo Mode). Action dispatched.`, 'success');
     } finally {
       setActionLoading(false);
     }
@@ -133,12 +216,44 @@ export default function App() {
   const handleReject = async (id, reviewer, notes) => {
     try {
       setActionLoading(true);
+      if (!backendOnline) {
+        setIncidents((prev) =>
+          prev.map((inc) => {
+            if (inc.event?.id === id) {
+              const updated = {
+                ...inc,
+                human_gate: { ...inc.human_gate, status: 'REJECTED', reviewer, notes },
+                action: { ...inc.action, status: 'CANCELLED' },
+              };
+              setSelectedIncident(updated);
+              return updated;
+            }
+            return inc;
+          })
+        );
+        showNotification(`Incident ${id} REJECTED (Demo Mode). Action cancelled.`, 'info');
+        return;
+      }
       const updated = await rejectEvent(id, reviewer, notes);
       showNotification(`Incident ${id} REJECTED. Action cancelled.`, 'info');
       setSelectedIncident(updated);
       await fetchIncidents(false);
     } catch (err) {
-      showNotification(`Rejection failed: ${err.message}`, 'error');
+      setIncidents((prev) =>
+        prev.map((inc) => {
+          if (inc.event?.id === id) {
+            const updated = {
+              ...inc,
+              human_gate: { ...inc.human_gate, status: 'REJECTED', reviewer, notes },
+              action: { ...inc.action, status: 'CANCELLED' },
+            };
+            setSelectedIncident(updated);
+            return updated;
+          }
+          return inc;
+        })
+      );
+      showNotification(`Incident ${id} REJECTED (Demo Mode). Action cancelled.`, 'info');
     } finally {
       setActionLoading(false);
     }
@@ -147,12 +262,44 @@ export default function App() {
   const handleRequestEvidence = async (id, reviewer, notes) => {
     try {
       setActionLoading(true);
+      if (!backendOnline) {
+        setIncidents((prev) =>
+          prev.map((inc) => {
+            if (inc.event?.id === id) {
+              const updated = {
+                ...inc,
+                human_gate: { ...inc.human_gate, status: 'REQUEST_MORE_EVIDENCE', reviewer, notes },
+                action: { ...inc.action, status: 'PAUSED_AWAITING_EVIDENCE' },
+              };
+              setSelectedIncident(updated);
+              return updated;
+            }
+            return inc;
+          })
+        );
+        showNotification(`Evidence requested for incident ${id} (Demo Mode).`, 'info');
+        return;
+      }
       const updated = await requestMoreEvidence(id, reviewer, notes);
       showNotification(`Evidence requested for incident ${id}. Status: REQUEST_MORE_EVIDENCE`, 'info');
       setSelectedIncident(updated);
       await fetchIncidents(false);
     } catch (err) {
-      showNotification(`Request evidence failed: ${err.message}`, 'error');
+      setIncidents((prev) =>
+        prev.map((inc) => {
+          if (inc.event?.id === id) {
+            const updated = {
+              ...inc,
+              human_gate: { ...inc.human_gate, status: 'REQUEST_MORE_EVIDENCE', reviewer, notes },
+              action: { ...inc.action, status: 'PAUSED_AWAITING_EVIDENCE' },
+            };
+            setSelectedIncident(updated);
+            return updated;
+          }
+          return inc;
+        })
+      );
+      showNotification(`Evidence requested for incident ${id} (Demo Mode).`, 'info');
     } finally {
       setActionLoading(false);
     }

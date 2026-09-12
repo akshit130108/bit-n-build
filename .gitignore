@@ -12,3 +12,6 @@ ESC-50/
 .env.*
 firebase-key.json
 service-account*.json
+node_modules/
+dist/
+

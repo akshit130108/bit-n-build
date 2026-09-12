@@ -1,3 +1,4 @@
+import uuid
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 from pydantic import BaseModel, Field, field_validator
@@ -9,7 +10,7 @@ class Location(BaseModel):
 
 
 class NormalizedEvent(BaseModel):
-    id: str = Field(..., min_length=1, description="Unique event identifier")
+    id: str = Field(default_factory=lambda: f"evt_{uuid.uuid4().hex[:8]}", description="Unique event identifier")
     domain: str = Field(..., description="Sensor/ecological domain, e.g. land, ocean")
     event_type: str = Field(..., description="Raw detected type, e.g. chainsaw, gunshot, suspicious_vessel")
     confidence: float = Field(..., ge=0.0, le=1.0, description="Confidence score between 0.0 and 1.0")

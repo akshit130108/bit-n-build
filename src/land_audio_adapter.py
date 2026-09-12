@@ -6,6 +6,8 @@ import json
 from datetime import datetime
 
 import os
+import uuid
+import httpx
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -83,15 +85,33 @@ def classify_audio(file_path, sensor_id="S01", location=None):
 
     # Create normalized event
     event = {
-    "domain": "land",
-    "event_type": str(prediction),
-    "confidence": round(confidence, 3),
-    "sensor_id": sensor_id,
-    "timestamp": datetime.now().isoformat(),
-    "location": location
-}
+        "id": f"evt_audio_{uuid.uuid4().hex[:8]}",
+        "domain": "land",
+        "event_type": str(prediction),
+        "confidence": round(confidence, 3),
+        "sensor_id": sensor_id,
+        "timestamp": datetime.now().isoformat(),
+        "location": location,
+        "metadata": {
+            "source": "land_audio_ml",
+            "dangerous_threat": prediction in dangerous,
+            "raw_prediction": str(prediction),
+        },
+    }
 
     return json.dumps(event)
+
+
+def post_to_person3(event, backend_url="http://localhost:8000/events", timeout_sec=5.0):
+    """
+    Send normalized land event to Person 3 reasoning pipeline.
+    Accepts either a JSON string or dict.
+    """
+    payload = json.loads(event) if isinstance(event, str) else event
+    response = httpx.post(backend_url, json=payload, timeout=timeout_sec)
+    response.raise_for_status()
+    return response.json()
+
 
 
 if __name__ == "__main__":

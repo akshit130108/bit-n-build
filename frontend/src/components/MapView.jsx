@@ -74,12 +74,25 @@ export default function MapView({ incidents = [], selectedIncident, onSelectInci
         maxZoom: 18,
       });
 
-      // CartoDB Dark Matter tile layer for an operational dashboard aesthetic
-      L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-        attribution: '&copy; <a href="https://carto.com/">CARTO</a> &copy; OpenStreetMap',
-        subdomains: 'abcd',
+      // High-resolution satellite imagery (free, unwatermarked, high fidelity for land & ocean)
+      const satellite = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+        attribution: 'Tiles &copy; Esri, Maxar, Earthstar Geographics',
+        maxZoom: 18,
+      });
+
+      const streetMap = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
         maxZoom: 19,
-      }).addTo(map);
+      });
+
+      // Default to satellite layer
+      satellite.addTo(map);
+
+      // Layer switcher control
+      L.control.layers({
+        '🛰️ Satellite': satellite,
+        '🗺️ Street Map': streetMap,
+      }, null, { position: 'topright' }).addTo(map);
 
       markersLayerRef.current = L.layerGroup().addTo(map);
       mapInstanceRef.current = map;

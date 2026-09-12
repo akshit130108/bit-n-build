@@ -12,6 +12,8 @@ import {
   simulateLand,
   simulateOcean,
   seedRecurrence,
+  getApiBaseUrl,
+  setApiBaseUrl,
 } from './api/ecosentinel';
 
 export default function App() {
@@ -23,6 +25,9 @@ export default function App() {
   const [actionLoading, setActionLoading] = useState(false);
   const [notification, setNotification] = useState(null);
   const [apiError, setApiError] = useState(null);
+  const [apiUrl, setApiUrl] = useState(getApiBaseUrl());
+  const [inputUrl, setInputUrl] = useState(apiUrl);
+  const [showConfig, setShowConfig] = useState(false);
 
   const showNotification = (message, type = 'info') => {
     setNotification({ message, type });
@@ -153,6 +158,17 @@ export default function App() {
     }
   };
 
+  const handleUpdateApiUrl = (newUrl) => {
+    const trimmed = (newUrl || '').trim();
+    if (!trimmed) return;
+    setApiBaseUrl(trimmed);
+    setApiUrl(trimmed);
+    setInputUrl(trimmed);
+    setShowConfig(false);
+    showNotification(`Connecting to API: ${trimmed}`, 'info');
+    fetchIncidents(true);
+  };
+
   return (
     <div className="app-container">
       {/* Top Header */}
@@ -195,21 +211,70 @@ export default function App() {
             </button>
           </div>
 
-          <div className="connection-status">
-            <span
-              className={`status-dot ${backendOnline ? 'online' : 'offline'}`}
-            />
-            <span className="status-text">
-              {backendOnline ? 'BACKEND ONLINE' : 'DISCONNECTED'}
-            </span>
-            {lastUpdated && (
-              <span className="last-sync">
-                {lastUpdated.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+          <div className="connection-group">
+            <div
+              className="connection-status"
+              onClick={() => setShowConfig((prev) => !prev)}
+              title="Click to change API endpoint"
+              style={{ cursor: 'pointer' }}
+            >
+              <span
+                className={`status-dot ${backendOnline ? 'online' : 'offline'}`}
+              />
+              <span className="status-text">
+                {backendOnline ? 'BACKEND ONLINE' : 'DISCONNECTED'}
               </span>
-            )}
+              {lastUpdated && (
+                <span className="last-sync">
+                  {lastUpdated.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                </span>
+              )}
+            </div>
+
+            <button
+              className="btn-api-config-toggle"
+              onClick={() => setShowConfig((prev) => !prev)}
+              title="Configure API URL"
+            >
+              ⚙️ API
+            </button>
           </div>
         </div>
       </header>
+
+      {/* API Endpoint Config Drawer */}
+      {showConfig && (
+        <div className="api-config-drawer">
+          <div className="api-config-content">
+            <span className="api-config-label">Active Backend API:</span>
+            <input
+              type="text"
+              value={inputUrl}
+              onChange={(e) => setInputUrl(e.target.value)}
+              placeholder="e.g. https://ecosentinel-backend.onrender.com or http://localhost:8000"
+              className="api-url-input"
+            />
+            <button
+              className="btn-url-save"
+              onClick={() => handleUpdateApiUrl(inputUrl)}
+            >
+              Connect
+            </button>
+            <button
+              className="btn-quick-url"
+              onClick={() => handleUpdateApiUrl('https://ecosentinel-backend.onrender.com')}
+            >
+              🚀 Render URL
+            </button>
+            <button
+              className="btn-quick-url"
+              onClick={() => handleUpdateApiUrl('http://localhost:8000')}
+            >
+              💻 Localhost:8000
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Notification Toast */}
       {notification && (
@@ -218,10 +283,40 @@ export default function App() {
         </div>
       )}
 
-      {/* API Error Banner */}
+      {/* API Error Banner with 1-Click Reconnect */}
       {apiError && (
         <div className="error-banner">
-          ⚠️ Connection Issue: {apiError}. Check that the backend is running on <code>http://localhost:8000</code>.
+          <div className="error-banner-text">
+            ⚠️ <strong>Connection Issue:</strong> {apiError}
+          </div>
+          <div className="error-banner-quick-actions">
+            <span>Connect to:</span>
+            <button
+              className="btn-quick-url"
+              onClick={() => handleUpdateApiUrl('https://ecosentinel-backend.onrender.com')}
+            >
+              🚀 Render Backend
+            </button>
+            <button
+              className="btn-quick-url"
+              onClick={() => handleUpdateApiUrl('http://localhost:8000')}
+            >
+              💻 Localhost:8000
+            </button>
+            <input
+              type="text"
+              value={inputUrl}
+              onChange={(e) => setInputUrl(e.target.value)}
+              placeholder="Custom API URL (e.g. https://...onrender.com)"
+              className="api-url-input-inline"
+            />
+            <button
+              className="btn-url-save"
+              onClick={() => handleUpdateApiUrl(inputUrl)}
+            >
+              Save & Connect
+            </button>
+          </div>
         </div>
       )}
 

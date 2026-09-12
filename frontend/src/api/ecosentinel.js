@@ -3,15 +3,35 @@
  * Connects the React dashboard to Person 3's shared reasoning pipeline.
  */
 
-const RAW_URL = import.meta.env.VITE_API_URL || 
-  (typeof window !== 'undefined' && window.location.port !== '5173' && window.location.hostname !== 'localhost' 
-    ? window.location.origin 
-    : 'http://localhost:8000');
+export function getApiBaseUrl() {
+  if (typeof window !== 'undefined') {
+    const saved = localStorage.getItem('ecosentinel_api_url');
+    if (saved && saved.trim()) return saved.trim().replace(/\/+$/, '');
+  }
+  const envUrl = import.meta.env.VITE_API_URL;
+  if (envUrl && envUrl.trim()) return envUrl.trim().replace(/\/+$/, '');
 
-const API_BASE_URL = RAW_URL.replace(/\/+$/, '');
+  // If deployed on Render or elsewhere, attempt connecting to default Render backend
+  if (typeof window !== 'undefined' && window.location.hostname.includes('onrender.com')) {
+    return 'https://ecosentinel-backend.onrender.com';
+  }
+
+  return 'http://localhost:8000';
+}
+
+export function setApiBaseUrl(url) {
+  if (typeof window !== 'undefined') {
+    if (!url || !url.trim()) {
+      localStorage.removeItem('ecosentinel_api_url');
+    } else {
+      localStorage.setItem('ecosentinel_api_url', url.trim().replace(/\/+$/, ''));
+    }
+  }
+}
 
 async function request(endpoint, options = {}) {
-  const url = `${API_BASE_URL}${endpoint}`;
+  const baseUrl = getApiBaseUrl();
+  const url = `${baseUrl}${endpoint}`;
   try {
     const res = await fetch(url, {
       headers: {
@@ -26,7 +46,15 @@ async function request(endpoint, options = {}) {
       throw new Error(`HTTP ${res.status}: ${errorText || res.statusText}`);
     }
 
-    return await res.json();
+    const text = await res.text();
+    // Guard against HTML returned by SPA catch-all routers (e.g. index.html)
+    if (text.trim().startsWith('<') || text.trim().startsWith('<!doctype') || text.trim().startsWith('<!DOCTYPE')) {
+      throw new Error(
+        `Backend returned HTML instead of JSON. Ensure the backend API URL is configured (currently: ${baseUrl}).`
+      );
+    }
+
+    return JSON.parse(text);
   } catch (err) {
     console.error(`API error at ${endpoint}:`, err);
     throw err;

@@ -8,3 +8,7 @@ data/labels.npy
 models/*.joblib
 ESC-50/
 .DS_Store
+.env
+.env.*
+firebase-key.json
+service-account*.json

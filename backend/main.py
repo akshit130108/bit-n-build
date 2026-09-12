@@ -45,6 +45,7 @@ def root() -> Dict[str, Any]:
         "status": "operational",
         "storage_backend": db_client.backend_type,
         "docs_url": "/docs",
+        "dashboard_url": "/dashboard",
     }
 
 
@@ -187,3 +188,13 @@ def demo_seed_recurrence(clear_first: bool = Query(default=True, description="Cl
             f"historical incidents were retrieved in Sector-7. Human gate triggered status {result.human_gate.status}."
         ),
     }
+
+
+# Mount built React dashboard at /dashboard if frontend/dist exists
+import os
+from fastapi.staticfiles import StaticFiles
+
+frontend_dist = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "frontend", "dist"))
+if os.path.exists(frontend_dist):
+    app.mount("/dashboard", StaticFiles(directory=frontend_dist, html=True), name="dashboard")
+

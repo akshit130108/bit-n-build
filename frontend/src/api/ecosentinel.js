@@ -3,7 +3,12 @@
  * Connects the React dashboard to Person 3's shared reasoning pipeline.
  */
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+const RAW_URL = import.meta.env.VITE_API_URL || 
+  (typeof window !== 'undefined' && window.location.port !== '5173' && window.location.hostname !== 'localhost' 
+    ? window.location.origin 
+    : 'http://localhost:8000');
+
+const API_BASE_URL = RAW_URL.replace(/\/+$/, '');
 
 async function request(endpoint, options = {}) {
   const url = `${API_BASE_URL}${endpoint}`;

@@ -21,82 +21,86 @@ from orchestrator.pipeline import process_event
 
 
 def print_divider(title: str) -> None:
-    print("\n" + "=" * 70)
+    print("\n" + "=" * 60)
     print(f"  {title.upper()}")
-    print("=" * 70)
+    print("=" * 60)
 
 
-def print_kv(key: str, val: str, indent: int = 4) -> None:
+def print_kv(key: str, val: str, indent: int = 2) -> None:
     prefix = " " * indent
-    print(f"{prefix}{key:<26}: {val}")
+    print(f"{prefix}{key:<24}: {val}")
 
 
 def main() -> None:
-    print_divider("EcoSentinel - Person 2 Ocean / AIS Adapter Demo")
+    print_divider("EcoSentinel Ocean Demo")
     print(f"Timestamp: {datetime.now(timezone.utc).isoformat()}")
+
+    # 1. Check GFW Token & Mode
     gfw_token = os.environ.get("GFW_API_TOKEN")
     if gfw_token:
-        print("  GFW API Token           : Configured (Live gateway.api.globalfishingwatch.org enabled)")
+        print_kv("Data source", "Global Fishing Watch")
+        print_kv("Mode", "LIVE")
     else:
-        print("  GFW API Token           : Not set (Using high-fidelity calibrated GFW v3 event model)")
+        print_kv("Data source", "EcoSentinel demo")
+        print_kv("Mode", "SIMULATED")
+        print("  (Note: Set GFW_API_TOKEN to enable live Global Fishing Watch API calls)")
 
-    # 1. Retrieve GFW Ocean Events
-    print("\n[Step 1] Fetching Ocean Events from Global Fishing Watch Adapter...")
-    events = fetch_ocean_events(limit=3)
-    print(f"  Retrieved {len(events)} candidate marine events.")
-
-    # 2. Select Concrete Galapagos Dark Vessel Demo Event
+    # 2. Fetch Ocean Events
+    events = fetch_ocean_events(limit=3, mode="auto")
     demo_event = events[0]
-    print("\n[Step 2] Normalized Ocean Event (Person 3 Contract):")
-    print("-" * 50)
-    print(json.dumps(demo_event.model_dump(), indent=2))
+    meta = demo_event.metadata or {}
+
+    print_divider("Observed Vessel Event Summary")
+    print_kv("Data source", meta.get("source", "unknown"))
+    print_kv("Mode", meta.get("data_mode", "unknown").upper())
+    print_kv("Vessel ID", meta.get("vessel_id", "unknown"))
+    print_kv("Vessel Class", meta.get("vessel_type", "unknown"))
+    print_kv("Flag State", meta.get("flag", "unknown"))
+    print_kv("Event", "AIS GAP (potential_dark_vessel)")
+    print_kv("AIS gap", f"{meta.get('ais_gap_hours', 0.0)} hours")
+    print_kv("Loitering", "YES" if meta.get("loitering") else "NO")
+    print_kv("Encounter", "YES" if meta.get("encounter") else "NO")
+    print_kv("Apparent Fishing", "YES" if meta.get("apparent_fishing") else "NO")
+    print_kv("Protected area", "YES" if meta.get("protected_area") else "NO")
+    print_kv("MPA Name", str(meta.get("protected_area_name", "N/A")))
+    print_kv("Boundary Context", str(meta.get("boundary_source", "N/A")))
+    print_kv("Suspicion score", f"{demo_event.confidence:.2f} (Prototype score, not confirmed IUU)")
+
+    print("\nReasons:")
+    for reason in meta.get("reasons", []):
+        print(f"  - {reason}")
+
+    print_divider("Creating Normalized Event (Person 3 Contract)")
+    print_kv("id", demo_event.id)
+    print_kv("domain", demo_event.domain)
+    print_kv("event_type", demo_event.event_type)
+    print_kv("confidence", str(demo_event.confidence))
+    print_kv("sensor_id", demo_event.sensor_id)
+    print_kv("location", f"lat={demo_event.location.lat}, lon={demo_event.location.lon}")
 
     # 3. Process through Person 3 Shared Reasoning Pipeline
-    print("\n[Step 3] Passing Normalized Event into Person 3 Reasoning Pipeline...")
+    print_divider("Sending to Person 3 Reasoning Pipeline...")
     reasoning_result = process_event(demo_event)
 
-    print("\n[Step 4] Person 3 Reasoning Engine Evaluation:")
-    print("-" * 50)
-    print_kv("Domain", reasoning_result.event.domain.upper())
-    print_kv("Detected Event Type", reasoning_result.event.event_type)
-    print_kv("Adapter Confidence", f"{reasoning_result.event.confidence:.2f}")
-
-    print("\n  >>> [CLASSIFIER AGENT]")
-    print_kv("Refined Threat", reasoning_result.classification.refined_type)
+    print_kv("Classification", reasoning_result.classification.refined_type)
     print_kv("Threat Category", reasoning_result.classification.category)
-    print_kv("Urgency", reasoning_result.classification.urgency)
-    print_kv("Reasoning", "; ".join(reasoning_result.classification.reasons))
-
-    print("\n  >>> [VERIFICATION AGENT]")
-    print_kv("Verification Level", reasoning_result.verification.level.upper())
-    print_kv("Verification Score", f"{reasoning_result.verification.score:.2f}")
-    print_kv("Evidence", "; ".join(reasoning_result.verification.reasons))
-
-    print("\n  >>> [LOCALIZATION & MPA CONTEXT]")
-    print_kv("Coordinates", f"Lat={reasoning_result.localization.lat}, Lon={reasoning_result.localization.lon}")
-    print_kv("Operational Sector", reasoning_result.localization.sector_name)
-    print_kv("MPA Name", str(reasoning_result.event.metadata.get("protected_area_name")))
-    print_kv("Inside Protected Area?", str(reasoning_result.event.metadata.get("protected_area")))
-
-    print("\n  >>> [RISK ASSESSMENT AGENT]")
-    print_kv("Multi-Factor Risk Score", f"{reasoning_result.risk.score} / 100")
-    print_kv("Risk Alert Level", reasoning_result.risk.level)
-    print_kv("Risk Breakdown", str(reasoning_result.risk.factors))
-    print_kv("Risk Reasons", "; ".join(reasoning_result.risk.reasons))
-
-    print("\n  >>> [HUMAN SUPERVISION GATE]")
-    print_kv("Requires Human Clearance", str(reasoning_result.human_gate.requires_human))
-    print_kv("Gate Status", reasoning_result.human_gate.status)
-    print_kv("Gate Rationale", "; ".join(reasoning_result.human_gate.reasons))
-
-    print("\n  >>> [ACTION AGENT]")
+    print_kv("Verification Level", f"{reasoning_result.verification.level.upper()} (score: {reasoning_result.verification.score:.2f})")
+    print_kv("Risk Score", f"{reasoning_result.risk.score} / 100")
+    print_kv("Risk Level", reasoning_result.risk.level)
+    print_kv("Human Gate", reasoning_result.human_gate.status)
+    print_kv("Human Approval?", "REQUIRED" if reasoning_result.human_gate.requires_human else "NOT REQUIRED")
     print_kv("Recommended Action", reasoning_result.action.action)
     print_kv("Operational Message", reasoning_result.action.message)
-    print_kv("Dispatched Immediately", str(reasoning_result.action.dispatched))
-    print_kv("Action Context", "; ".join(reasoning_result.action.reasons))
 
-    print_divider("Ocean Pipeline Verification Successful")
-    print("Person 2 GFW adapter seamlessly consumed by Person 3 reasoning engine.")
+    # 4. Optional Live HTTP POST check
+    api_url = os.environ.get("ECOSENTINEL_API_URL", "http://localhost:8000/events")
+    try:
+        http_res = post_to_person3(demo_event, backend_url=api_url, timeout_sec=1.5)
+        print(f"\nLive HTTP POST {api_url} -> 200 OK (Status: {http_res.get('human_gate', {}).get('status')})")
+    except Exception:
+        print(f"\nLive HTTP endpoint ({api_url}) not reachable (Standalone pipeline verified).")
+
+    print_divider("Demo Completed Successfully")
 
 
 if __name__ == "__main__":

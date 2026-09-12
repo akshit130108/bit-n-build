@@ -3,6 +3,10 @@ EcoSentinel - Person 2 Ocean/AIS Adapter (Global Fishing Watch API v3)
 Retrieves AIS gap, loitering, encounter, and fishing events from Global Fishing Watch (GFW),
 evaluates suspicious dark vessel behavior, enriches with Marine Protected Area (MPA) context,
 and normalizes into the Person 3 reasoning event contract.
+
+CANONICAL ADAPTER:
+This module (backend/adapters/ocean_gfw.py) is the canonical ocean adapter for the EcoSentinel system.
+All ocean event ingestion for Person 3 should import from this module.
 """
 
 import math
@@ -23,12 +27,12 @@ DATASET_ENCOUNTERS = "public-global-encounters-events:latest"
 DATASET_FISHING = "public-global-fishing-events:latest"
 
 # Demo Marine Protected Area (MPA) Boundaries (GeoJSON Polygon coordinates [lon, lat])
-# Clearly labeled local boundary context for hackathon demonstration
+# Clearly labeled local boundary context for hackathon demonstration.
+# Authoritative boundary context source is explicitly noted as 'local_demo_geojson'.
 DEMO_MPAS: Dict[str, Dict[str, Any]] = {
     "Galapagos Marine Reserve": {
         "source": "local_demo_geojson",
         "description": "UNESCO World Heritage marine sanctuary with strictly prohibited commercial fishing",
-        # Approximate bounding polygon for Galapagos Marine Reserve
         "polygon": [
             [-92.50, -1.50],
             [-89.00, -1.50],
@@ -84,7 +88,6 @@ def distance_to_polygon_boundary_km(lat: float, lon: float, polygon: List[List[f
     for i in range(len(polygon) - 1):
         v1_lon, v1_lat = polygon[i]
         v2_lon, v2_lat = polygon[i + 1]
-        # Approximate segment midpoint distance
         mid_lat = (v1_lat + v2_lat) / 2.0
         mid_lon = (v1_lon + v2_lon) / 2.0
         d = haversine_km(lat, lon, mid_lat, mid_lon)
@@ -97,6 +100,7 @@ def evaluate_mpa_context(lat: float, lon: float, buffer_threshold_km: float = 20
     """
     Evaluate whether geographic coordinates fall inside, near the boundary,
     or outside a designated Marine Protected Area.
+    Explicitly labels the geometry source as 'local_demo_geojson'.
     """
     for mpa_name, mpa_info in DEMO_MPAS.items():
         poly = mpa_info["polygon"]
@@ -138,12 +142,16 @@ def calculate_dark_vessel_confidence(
     protected_area: bool,
     distance_from_shore_nm: float,
     repeated_gaps: bool = False,
-) -> Tuple[float, List[str]]:
+) -> Tuple[float, List[str], List[str]]:
     """
-    Calculate a transparent prototype confidence score (0.0 - 1.0) and reasoning
+    Calculate a transparent prototype suspicion score (0.0 - 1.0) and reasoning
     for potential dark vessel behavior.
+    NOTE: This is a prototype heuristic score for hackathon demonstration,
+    NOT a scientifically certified probability of illegal fishing.
+    Returns (confidence, reasons, supporting_evidence).
     """
     reasons: List[str] = []
+    supporting_evidence: List[str] = ["AIS gap"]
 
     # Base score: AIS gap detected
     score = 0.50
@@ -153,6 +161,7 @@ def calculate_dark_vessel_confidence(
     if gap_hours >= 24.0:
         score += 0.10
         reasons.append("Prolonged AIS gap exceeds 24 hours")
+        supporting_evidence.append("Extended gap duration (>24h)")
     elif gap_hours >= 12.0:
         score += 0.05
         reasons.append("Extended AIS gap exceeds 12 hours")
@@ -161,45 +170,53 @@ def calculate_dark_vessel_confidence(
     if "fishing" in vessel_type.lower():
         score += 0.10
         reasons.append("Commercial fishing vessel class")
+        supporting_evidence.append("Fishing vessel classification")
 
     # Apparent fishing activity
     if apparent_fishing:
         score += 0.10
         reasons.append("Apparent fishing activity detected during surrounding track")
+        supporting_evidence.append("Apparent fishing activity")
 
     # Loitering / Encounter contextual corroboration
     if loitering or encounter:
         score += 0.05
         if loitering and encounter:
             reasons.append("Preceding loitering and transshipment encounter detected")
+            supporting_evidence.append("Loitering")
+            supporting_evidence.append("Encounter")
         elif loitering:
             reasons.append("Loitering behavior detected prior to AIS transponder gap")
+            supporting_evidence.append("Loitering")
         else:
             reasons.append("At-sea encounter detected with auxiliary carrier/support vessel")
+            supporting_evidence.append("Encounter")
 
     # Marine Protected Area proximity
     if protected_area:
         score += 0.10
-        reasons.append("Operation intersects or borders sensitive Marine Protected Area boundary")
+        reasons.append("Activity intersects or borders sensitive Marine Protected Area boundary")
+        supporting_evidence.append("Activity near/inside protected area")
 
     # Repeated suspicious behavior or offshore isolation
     if repeated_gaps:
         score += 0.05
         reasons.append("Vessel has repeated historical AIS disablement records")
+        supporting_evidence.append("Repeated AIS gaps")
     elif distance_from_shore_nm >= 50.0:
         score += 0.03
         reasons.append(f"Offshore evasion: {distance_from_shore_nm:.0f} nm from coastal monitoring authority")
 
     # Clamp confidence between 0.0 and 1.0
     final_confidence = round(max(0.0, min(1.0, score)), 2)
-    return final_confidence, reasons
+    return final_confidence, reasons, supporting_evidence
 
 
 def detect_dark_vessel(
     gap_hours: float = 18.5,
-    lat: float = -0.5000,
-    lon: float = -90.5000,
-    vessel_id: str = "vsl_pacific_trawler_09",
+    lat: float = -0.4850,
+    lon: float = -90.4920,
+    vessel_id: str = "demo_vsl_galapagos_trawler",
     vessel_type: str = "FISHING",
     flag: str = "CHN",
     distance_from_shore_nm: float = 72.0,
@@ -209,15 +226,22 @@ def detect_dark_vessel(
     repeated_gaps: bool = False,
     custom_id: Optional[str] = None,
     timestamp: Optional[str] = None,
+    data_mode: str = "simulated",  # Explicitly 'live' or 'simulated'
+    source: Optional[str] = None,  # 'global_fishing_watch' if live, 'ecosentinel_demo' if simulated
+    gfw_event_id: Optional[str] = None,
 ) -> NormalizedEvent:
     """
     Detects potential dark vessel behavior from AIS gap and spatial-temporal evidence,
     computes an interpretable confidence score, and returns a normalized EcoSentinel event.
+
+    CRITICAL TRUTHFULNESS RULE:
+    - If data_mode is 'live', source is 'global_fishing_watch'.
+    - If data_mode is 'simulated', source is 'ecosentinel_demo', clearly identifying it as simulated.
     """
     mpa_info = evaluate_mpa_context(lat, lon)
     is_mpa = mpa_info["protected_area"]
 
-    confidence, reasons = calculate_dark_vessel_confidence(
+    confidence, reasons, supporting_evidence = calculate_dark_vessel_confidence(
         gap_hours=gap_hours,
         vessel_type=vessel_type,
         apparent_fishing=apparent_fishing,
@@ -228,11 +252,20 @@ def detect_dark_vessel(
         repeated_gaps=repeated_gaps,
     )
 
-    event_id = custom_id or f"gfw_evt_{uuid.uuid4().hex[:10]}"
+    actual_data_mode = "live" if data_mode == "live" else "simulated"
+    actual_source = source or ("global_fishing_watch" if actual_data_mode == "live" else "ecosentinel_demo")
+
+    if actual_data_mode == "simulated":
+        prefix = "demo_ocean_evt"
+    else:
+        prefix = "gfw_evt"
+
+    event_id = custom_id or f"{prefix}_{uuid.uuid4().hex[:10]}"
     event_timestamp = timestamp or datetime.now(timezone.utc).isoformat()
 
     metadata: Dict[str, Any] = {
-        "source": "global_fishing_watch",
+        "source": actual_source,
+        "data_mode": actual_data_mode,
         "vessel_id": vessel_id,
         "vessel_type": vessel_type.upper(),
         "flag": flag.upper(),
@@ -241,13 +274,24 @@ def detect_dark_vessel(
         "protected_area": is_mpa,
         "protected_area_name": mpa_info["protected_area_name"],
         "distance_to_boundary_km": mpa_info["distance_to_boundary_km"],
+        "boundary_source": mpa_info["boundary_source"],
         "loitering": loitering,
         "encounter": encounter,
         "apparent_fishing": apparent_fishing,
         "nearby_confirmations": 1 if (loitering or encounter) else 0,
         "ais_disabled": True,
+        "supporting_evidence": supporting_evidence,
         "reasons": reasons,
     }
+
+    if gfw_event_id:
+        metadata["gfw_event_id"] = gfw_event_id
+
+    if actual_data_mode == "simulated":
+        metadata["note"] = (
+            "Simulated demonstration event modeled on typical EEZ boundary fishing behavior. "
+            "Set GFW_API_TOKEN to fetch live observations."
+        )
 
     return NormalizedEvent(
         id=event_id,
@@ -255,93 +299,23 @@ def detect_dark_vessel(
         event_type="potential_dark_vessel",
         confidence=confidence,
         timestamp=event_timestamp,
-        sensor_id="GFW_AIS",
+        sensor_id="GFW_AIS" if actual_data_mode == "live" else "ECOSENTINEL_SIMULATOR",
         location=Location(lat=lat, lon=lon),
         metadata=metadata,
     )
 
 
-def fetch_ocean_events(
-    start_date: Optional[str] = None,
-    end_date: Optional[str] = None,
-    token: Optional[str] = None,
-    limit: int = 10,
-) -> List[NormalizedEvent]:
+def get_simulated_ocean_events(limit: int = 3) -> List[NormalizedEvent]:
     """
-    Retrieves AIS gap and suspicious vessel events from the Global Fishing Watch API v3.
-    If GFW_API_TOKEN is unavailable or the live API call fails, seamlessly returns
-    high-fidelity real-world GFW events formatted to the exact EcoSentinel contract.
+    Returns clearly labeled simulated demo events.
+    Never misrepresents simulated data as live Global Fishing Watch data.
     """
-    api_token = token or os.environ.get("GFW_API_TOKEN")
-
-    if api_token:
-        try:
-            # Query GFW v3 Events API for gap events
-            headers = {"Authorization": f"Bearer {api_token}"}
-            params = {
-                "datasets": DATASET_GAPS,
-                "limit": limit,
-            }
-            if start_date:
-                params["start-date"] = start_date
-            if end_date:
-                params["end-date"] = end_date
-
-            response = httpx.get(
-                f"{GFW_API_BASE}/events",
-                headers=headers,
-                params=params,
-                timeout=8.0,
-            )
-
-            if response.status_code == 200:
-                data = response.json()
-                entries = data.get("entries", [])
-                normalized_events: List[NormalizedEvent] = []
-
-                for entry in entries:
-                    pos = entry.get("position", {})
-                    lat = float(pos.get("lat", 0.0))
-                    lon = float(pos.get("lon", 0.0))
-                    gap_info = entry.get("gap", {})
-                    gap_hours = float(gap_info.get("durationHours", 12.0))
-                    dist_shore = float(gap_info.get("distanceFromShoreKm", 50.0)) * 0.539957  # km to nm
-
-                    vessel_info = entry.get("vessel", {})
-                    vessel_id = vessel_info.get("id", f"vsl_{uuid.uuid4().hex[:6]}")
-                    vessel_type = vessel_info.get("type", "FISHING")
-                    flag = vessel_info.get("flag", "UNKNOWN")
-
-                    event = detect_dark_vessel(
-                        gap_hours=gap_hours,
-                        lat=lat,
-                        lon=lon,
-                        vessel_id=vessel_id,
-                        vessel_type=vessel_type,
-                        flag=flag,
-                        distance_from_shore_nm=dist_shore,
-                        apparent_fishing=True,
-                        loitering=False,
-                        encounter=False,
-                        custom_id=f"gfw_live_{entry.get('id', uuid.uuid4().hex[:8])}",
-                        timestamp=entry.get("start"),
-                    )
-                    normalized_events.append(event)
-
-                if normalized_events:
-                    return normalized_events
-        except Exception:
-            # Fall back to high-fidelity calibrated events
-            pass
-
-    # High-Fidelity Demo Events modeled from documented GFW gap & loitering data
-    # (Galapagos Marine Reserve corridor & Chagos MPA)
-    return [
+    sim_events = [
         detect_dark_vessel(
             gap_hours=18.5,
             lat=-0.4850,
             lon=-90.4920,
-            vessel_id="gfw_vsl_8492_trawler",
+            vessel_id="demo_vsl_galapagos_trawler_01",
             vessel_type="FISHING",
             flag="CHN",
             distance_from_shore_nm=72.0,
@@ -349,13 +323,15 @@ def fetch_ocean_events(
             loitering=True,
             encounter=False,
             repeated_gaps=True,
-            custom_id="gfw_evt_galapagos_001",
+            custom_id="demo_ocean_evt_galapagos_001",
+            data_mode="simulated",
+            source="ecosentinel_demo",
         ),
         detect_dark_vessel(
             gap_hours=31.2,
             lat=-0.5210,
             lon=-90.5110,
-            vessel_id="gfw_vsl_1104_carrier",
+            vessel_id="demo_vsl_galapagos_carrier_02",
             vessel_type="CARRIER_REEFER",
             flag="PAN",
             distance_from_shore_nm=85.0,
@@ -363,13 +339,15 @@ def fetch_ocean_events(
             loitering=True,
             encounter=True,
             repeated_gaps=False,
-            custom_id="gfw_evt_galapagos_002",
+            custom_id="demo_ocean_evt_galapagos_002",
+            data_mode="simulated",
+            source="ecosentinel_demo",
         ),
         detect_dark_vessel(
             gap_hours=14.0,
             lat=-5.2100,
             lon=71.8500,
-            vessel_id="gfw_vsl_3301_longliner",
+            vessel_id="demo_vsl_chagos_longliner_03",
             vessel_type="FISHING",
             flag="TWN",
             distance_from_shore_nm=110.0,
@@ -377,26 +355,155 @@ def fetch_ocean_events(
             loitering=False,
             encounter=False,
             repeated_gaps=False,
-            custom_id="gfw_evt_chagos_003",
+            custom_id="demo_ocean_evt_chagos_003",
+            data_mode="simulated",
+            source="ecosentinel_demo",
         ),
     ]
+    return sim_events[:limit]
+
+
+def fetch_ocean_events(
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    token: Optional[str] = None,
+    limit: int = 10,
+    mode: str = "auto",  # 'auto', 'live', or 'simulated'
+) -> List[NormalizedEvent]:
+    """
+    Retrieves AIS gap and suspicious vessel events.
+
+    Modes:
+    - 'live': Strictly calls Global Fishing Watch API v3. Raises on error or missing token.
+    - 'simulated': Directly returns clearly labeled simulated demo events.
+    - 'auto': Attempts live API call if GFW_API_TOKEN is present; if absent or on error,
+              safely falls back to clearly labeled simulated events (source='ecosentinel_demo').
+    """
+    if mode == "simulated":
+        return get_simulated_ocean_events(limit=limit)
+
+    api_token = token or os.environ.get("GFW_API_TOKEN")
+
+    if not api_token:
+        if mode == "live":
+            raise ValueError("GFW_API_TOKEN environment variable not set. Live mode requires an API token.")
+        return get_simulated_ocean_events(limit=limit)
+
+    # Attempt live query to GFW v3 Events API
+    try:
+        headers = {"Authorization": f"Bearer {api_token}"}
+        params: Dict[str, Any] = {
+            "datasets": DATASET_GAPS,
+            "limit": min(limit, 20),
+        }
+        if start_date:
+            params["start-date"] = start_date
+        if end_date:
+            params["end-date"] = end_date
+
+        response = httpx.get(
+            f"{GFW_API_BASE}/events",
+            headers=headers,
+            params=params,
+            timeout=8.0,
+        )
+
+        if response.status_code == 200:
+            data = response.json()
+            entries = data.get("entries", [])
+            live_events: List[NormalizedEvent] = []
+
+            for entry in entries:
+                pos = entry.get("position", {})
+                lat = float(pos.get("lat", 0.0))
+                lon = float(pos.get("lon", 0.0))
+                gap_info = entry.get("gap", {})
+                gap_hours = float(gap_info.get("durationHours", 12.0))
+                dist_shore = float(gap_info.get("distanceFromShoreKm", 50.0)) * 0.539957  # km to nm
+
+                vessel_info = entry.get("vessel", {})
+                vessel_id = vessel_info.get("id", f"gfw_vsl_{uuid.uuid4().hex[:6]}")
+                vessel_type = vessel_info.get("type", "FISHING")
+                flag = vessel_info.get("flag", "UNKNOWN")
+                gfw_id = entry.get("id", uuid.uuid4().hex[:8])
+
+                event = detect_dark_vessel(
+                    gap_hours=gap_hours,
+                    lat=lat,
+                    lon=lon,
+                    vessel_id=vessel_id,
+                    vessel_type=vessel_type,
+                    flag=flag,
+                    distance_from_shore_nm=dist_shore,
+                    apparent_fishing=True,
+                    loitering=False,
+                    encounter=False,
+                    custom_id=f"gfw_evt_{gfw_id}",
+                    timestamp=entry.get("start"),
+                    data_mode="live",
+                    source="global_fishing_watch",
+                    gfw_event_id=gfw_id,
+                )
+                live_events.append(event)
+
+            if live_events:
+                return live_events
+
+            # Empty results from live API
+            if mode == "live":
+                return []
+            return get_simulated_ocean_events(limit=limit)
+
+        else:
+            if mode == "live":
+                raise RuntimeError(
+                    f"Global Fishing Watch API returned HTTP {response.status_code}: {response.text[:200]}"
+                )
+            # In auto mode, fall back to clearly labeled simulated data
+            return get_simulated_ocean_events(limit=limit)
+
+    except Exception as exc:
+        if mode == "live":
+            raise RuntimeError(f"Global Fishing Watch API request failed: {str(exc)}") from exc
+        # In auto mode, fall back to clearly labeled simulated data
+        return get_simulated_ocean_events(limit=limit)
 
 
 def get_demo_ocean_event() -> NormalizedEvent:
-    """Convenience helper returning the primary Galapagos dark vessel demonstration event."""
-    events = fetch_ocean_events(limit=1)
+    """
+    Convenience helper returning the primary Galapagos demonstration event.
+    If GFW_API_TOKEN is present, attempts to fetch live; otherwise returns simulated demo event.
+    """
+    events = fetch_ocean_events(limit=1, mode="auto")
     return events[0]
 
 
 def post_to_person3(
     event: NormalizedEvent,
-    backend_url: str = "http://localhost:8000/events",
+    backend_url: Optional[str] = None,
     timeout_sec: float = 5.0,
 ) -> Dict[str, Any]:
     """
     Dispatches a normalized ocean event to Person 3's shared reasoning pipeline.
+    Reads backend URL from ECOSENTINEL_API_URL or defaults to http://localhost:8000/events.
+    Handles connection errors, timeouts, and HTTP status codes cleanly.
     """
-    payload = event.model_dump()
-    response = httpx.post(backend_url, json=payload, timeout=timeout_sec)
-    response.raise_for_status()
-    return response.json()
+    target_url = backend_url or os.environ.get("ECOSENTINEL_API_URL", "http://localhost:8000/events")
+    payload = event.model_dump(mode="json")
+
+    try:
+        response = httpx.post(target_url, json=payload, timeout=timeout_sec)
+        response.raise_for_status()
+        return response.json()
+    except httpx.ConnectError as ce:
+        raise ConnectionError(
+            f"Unable to connect to Person 3 backend at {target_url}. Is FastAPI running?"
+        ) from ce
+    except httpx.TimeoutException as te:
+        raise TimeoutError(
+            f"Request to Person 3 backend at {target_url} timed out after {timeout_sec}s"
+        ) from te
+    except httpx.HTTPStatusError as hse:
+        raise RuntimeError(
+            f"Person 3 backend returned HTTP {hse.response.status_code}: {hse.response.text}"
+        ) from hse

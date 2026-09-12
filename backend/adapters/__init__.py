@@ -9,6 +9,8 @@ from .ocean_gfw import (
     detect_dark_vessel,
     post_to_person3,
     get_demo_ocean_event,
+    get_simulated_ocean_events,
+    evaluate_mpa_context,
 )
 
 __all__ = [
@@ -20,5 +22,7 @@ __all__ = [
     "detect_dark_vessel",
     "post_to_person3",
     "get_demo_ocean_event",
+    "get_simulated_ocean_events",
+    "evaluate_mpa_context",
 ]
 

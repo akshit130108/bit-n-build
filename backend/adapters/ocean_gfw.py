@@ -363,12 +363,21 @@ def get_simulated_ocean_events(limit: int = 3) -> List[NormalizedEvent]:
     return sim_events[:limit]
 
 
+ALL_EVENTS_DATASETS = [
+    DATASET_GAPS,
+    DATASET_LOITERING,
+    DATASET_ENCOUNTERS,
+    DATASET_FISHING,
+]
+
+
 def fetch_ocean_events(
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
     token: Optional[str] = None,
     limit: int = 10,
     mode: str = "auto",  # 'auto', 'live', or 'simulated'
+    region: Optional[Any] = None,
 ) -> List[NormalizedEvent]:
     """
     Retrieves AIS gap and suspicious vessel events.
@@ -389,28 +398,44 @@ def fetch_ocean_events(
             raise ValueError("GFW_API_TOKEN environment variable not set. Live mode requires an API token.")
         return get_simulated_ocean_events(limit=limit)
 
-    # Attempt live query to GFW v3 Events API
+    # Attempt live query to GFW v3 Events API (HTTP POST with JSON payload)
     try:
-        headers = {"Authorization": f"Bearer {api_token}"}
-        params: Dict[str, Any] = {
-            "datasets": DATASET_GAPS,
-            "limit": min(limit, 20),
+        headers = {
+            "Authorization": f"Bearer {api_token}",
+            "Content-Type": "application/json",
+        }
+        json_body: Dict[str, Any] = {
+            "datasets": ALL_EVENTS_DATASETS,
         }
         if start_date:
-            params["start-date"] = start_date
+            json_body["startDate"] = start_date
         if end_date:
-            params["end-date"] = end_date
+            json_body["endDate"] = end_date
+        if region is not None:
+            json_body["region"] = region
 
-        response = httpx.get(
+        query_params: Dict[str, Any] = {
+            "limit": max(1, min(limit, 20)),
+            "offset": 0,
+        }
+
+        response = httpx.post(
             f"{GFW_API_BASE}/events",
             headers=headers,
-            params=params,
+            params=query_params,
+            json=json_body,
             timeout=8.0,
         )
 
-        if response.status_code == 200:
+        if response.status_code in (200, 201):
             data = response.json()
-            entries = data.get("entries", [])
+            if isinstance(data, dict):
+                entries = data.get("entries") or data.get("data") or []
+            elif isinstance(data, list):
+                entries = data
+            else:
+                entries = []
+
             live_events: List[NormalizedEvent] = []
 
             for entry in entries:
@@ -447,7 +472,7 @@ def fetch_ocean_events(
                 live_events.append(event)
 
             if live_events:
-                return live_events
+                return live_events[:limit]
 
             # Empty results from live API
             if mode == "live":
@@ -455,6 +480,7 @@ def fetch_ocean_events(
             return get_simulated_ocean_events(limit=limit)
 
         else:
+            print(f"GFW Events API returned HTTP {response.status_code}\nResponse: {response.text}")
             if mode == "live":
                 raise RuntimeError(
                     f"Global Fishing Watch API returned HTTP {response.status_code}: {response.text[:200]}"
@@ -463,10 +489,12 @@ def fetch_ocean_events(
             return get_simulated_ocean_events(limit=limit)
 
     except Exception as exc:
+        print(f"GFW Events API request exception: {str(exc)}")
         if mode == "live":
             raise RuntimeError(f"Global Fishing Watch API request failed: {str(exc)}") from exc
         # In auto mode, fall back to clearly labeled simulated data
         return get_simulated_ocean_events(limit=limit)
+
 
 
 def get_demo_ocean_event() -> NormalizedEvent:

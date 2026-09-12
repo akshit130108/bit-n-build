@@ -233,7 +233,7 @@ class TestOceanGFWAdapter(unittest.TestCase):
 
     # --- 10. GFW API Timeout Handling ---
     def test_gfw_api_timeout(self) -> None:
-        with patch("httpx.get", side_effect=httpx.TimeoutException("Connection timed out")):
+        with patch("httpx.post", side_effect=httpx.TimeoutException("Connection timed out")):
             # Auto mode gracefully falls back to simulated
             events = fetch_ocean_events(token="dummy_token_123", mode="auto")
             self.assertGreater(len(events), 0)
@@ -250,7 +250,7 @@ class TestOceanGFWAdapter(unittest.TestCase):
         mock_resp.status_code = 401
         mock_resp.text = '{"error": "invalid token"}'
 
-        with patch("httpx.get", return_value=mock_resp):
+        with patch("httpx.post", return_value=mock_resp):
             # Auto mode gracefully falls back to simulated
             events = fetch_ocean_events(token="invalid_token", mode="auto")
             self.assertGreater(len(events), 0)
@@ -261,7 +261,7 @@ class TestOceanGFWAdapter(unittest.TestCase):
                 fetch_ocean_events(token="invalid_token", mode="live")
             self.assertIn("401", str(cm.exception))
 
-    # --- 12. Real-Looking Mocked GFW Response Normalization ---
+    # --- 12. Real-Looking Mocked GFW Response Normalization & Request Shape ---
     def test_mocked_gfw_response_normalization(self) -> None:
         mock_payload = {
             "entries": [
@@ -282,8 +282,14 @@ class TestOceanGFWAdapter(unittest.TestCase):
         mock_resp.status_code = 200
         mock_resp.json.return_value = mock_payload
 
-        with patch("httpx.get", return_value=mock_resp):
-            events = fetch_ocean_events(token="valid_test_token", mode="live")
+        with patch("httpx.post", return_value=mock_resp) as mock_post:
+            events = fetch_ocean_events(
+                start_date="2026-08-01T00:00:00Z",
+                end_date="2026-08-15T23:59:59Z",
+                token="valid_test_token",
+                mode="live",
+                region={"type": "Polygon", "coordinates": [[[-92.5, -1.5], [-89.0, -1.5], [-89.0, 1.5], [-92.5, 1.5], [-92.5, -1.5]]]},
+            )
             self.assertEqual(len(events), 1)
             ev = events[0]
             self.assertEqual(ev.domain, "ocean")
@@ -294,6 +300,30 @@ class TestOceanGFWAdapter(unittest.TestCase):
             self.assertEqual(ev.metadata["vessel_id"], "vsl_real_trawler_44")
             self.assertEqual(ev.metadata["gfw_event_id"], "gfw_raw_gap_98765")
             self.assertAlmostEqual(ev.metadata["ais_gap_hours"], 22.4)
+
+            # Verify request shape (all 10 requirements)
+            mock_post.assert_called_once()
+            call_args, call_kwargs = mock_post.call_args
+            # 1 & 2: POST to /v3/events
+            self.assertEqual(call_args[0], "https://gateway.api.globalfishingwatch.org/v3/events")
+            # 3 & 4: Query parameters contain offset=0 and positive limit
+            params = call_kwargs["params"]
+            self.assertEqual(params["offset"], 0)
+            self.assertGreaterEqual(params["limit"], 1)
+            # 9: Authorization header present
+            self.assertEqual(call_kwargs["headers"]["Authorization"], "Bearer valid_test_token")
+            self.assertEqual(call_kwargs["headers"]["Content-Type"], "application/json")
+
+            # 5, 6, 7, 8: JSON body fields
+            json_body = call_kwargs["json"]
+            self.assertEqual(len(json_body["datasets"]), 4)
+            self.assertIn("public-global-gaps-events:latest", json_body["datasets"])
+            self.assertIn("public-global-loitering-events:latest", json_body["datasets"])
+            self.assertIn("public-global-encounters-events:latest", json_body["datasets"])
+            self.assertIn("public-global-fishing-events:latest", json_body["datasets"])
+            self.assertEqual(json_body["startDate"], "2026-08-01T00:00:00Z")
+            self.assertEqual(json_body["endDate"], "2026-08-15T23:59:59Z")
+            self.assertEqual(json_body["region"]["type"], "Polygon")
 
     # --- 13. Simulated Events Explicitly Marked Simulated ---
     def test_simulated_events_marked_explicitly(self) -> None:

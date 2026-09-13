@@ -6,14 +6,21 @@
 export function getApiBaseUrl() {
   if (typeof window !== 'undefined') {
     const saved = localStorage.getItem('ecosentinel_api_url');
-    if (saved && saved.trim()) return saved.trim().replace(/\/+$/, '');
+    if (saved && saved.trim()) {
+      let clean = saved.trim().replace(/\/+$/, '');
+      if (!clean.startsWith('http://') && !clean.startsWith('https://')) {
+        clean = `https://${clean}`;
+      }
+      return clean;
+    }
   }
   const envUrl = import.meta.env.VITE_API_URL;
-  if (envUrl && envUrl.trim()) return envUrl.trim().replace(/\/+$/, '');
-
-  // If deployed on Render or elsewhere, attempt connecting to default Render backend
-  if (typeof window !== 'undefined' && window.location.hostname.includes('onrender.com')) {
-    return 'https://ecosentinel-backend.onrender.com';
+  if (envUrl && envUrl.trim()) {
+    let clean = envUrl.trim().replace(/\/+$/, '');
+    if (!clean.startsWith('http://') && !clean.startsWith('https://')) {
+      clean = `https://${clean}`;
+    }
+    return clean;
   }
 
   return 'http://localhost:8000';

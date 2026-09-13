@@ -188,6 +188,22 @@ class TestOceanSchedulerAndAPI(unittest.TestCase):
             self.assertEqual(res_rej.status_code, 200)
             self.assertEqual(res_rej.json()["human_gate"]["status"], "REJECTED")
 
+    def test_08_demo_endpoints(self) -> None:
+        # Test POST /demo/fake-poaching
+        res_poach = self.client.post("/demo/fake-poaching")
+        self.assertEqual(res_poach.status_code, 200)
+        data_poach = res_poach.json()
+        self.assertEqual(data_poach["event"]["domain"], "land")
+        self.assertEqual(data_poach["event"]["event_type"], "gunshot")
+        self.assertEqual(data_poach["classification"]["category"], "wildlife_poaching")
+
+        # Test POST /demo/live-ocean
+        with patch("adapters.ocean_ingest.fetch_ocean_events", return_value=[]):
+            res_ocean = self.client.post("/demo/live-ocean?mode=simulated&limit=2")
+            self.assertEqual(res_ocean.status_code, 200)
+            data_ocean = res_ocean.json()
+            self.assertIn("fetched_count", data_ocean)
+
 
 if __name__ == "__main__":
     unittest.main()

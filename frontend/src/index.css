@@ -146,6 +146,15 @@ body {
   background-color: #c2410c;
 }
 
+.btn-poaching {
+  background-color: #581c87;
+  color: #e9d5ff;
+  border: 1px solid #9333ea;
+}
+.btn-poaching:hover:not(:disabled) {
+  background-color: #7e22ce;
+}
+
 .connection-status {
   display: flex;
   align-items: center;

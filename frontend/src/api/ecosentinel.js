@@ -119,6 +119,18 @@ export async function seedRecurrence() {
   });
 }
 
+export async function simulatePoaching() {
+  return request('/demo/fake-poaching', {
+    method: 'POST',
+  });
+}
+
+export async function triggerLiveOcean(mode = 'auto', limit = 5) {
+  return request(`/demo/live-ocean?mode=${mode}&limit=${limit}`, {
+    method: 'POST',
+  });
+}
+
 export async function getOceanIngestStatus() {
   return request('/ingest/ocean/status');
 }

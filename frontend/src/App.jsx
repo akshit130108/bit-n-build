@@ -12,7 +12,9 @@ import {
   requestMoreEvidence,
   simulateLand,
   simulateOcean,
+  simulatePoaching,
   seedRecurrence,
+  triggerOceanIngest,
   getApiBaseUrl,
   setApiBaseUrl,
 } from './api/ecosentinel';
@@ -138,6 +140,56 @@ export default function App() {
       setIncidents((prev) => [mock, ...prev]);
       setSelectedIncident(mock);
       showNotification(`Backend offline / sleeping — simulated Dark Vessel event in Demo Mode`, 'warning');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleSimulatePoaching = async () => {
+    try {
+      setActionLoading(true);
+      if (!backendOnline) {
+        const mock = createMockLandIncident();
+        mock.event.id = `evt_mock_poach_${Date.now()}`;
+        mock.event.event_type = 'gunshot';
+        mock.event.confidence = 0.95;
+        mock.classification.refined_type = 'possible_poaching';
+        mock.classification.category = 'wildlife_poaching';
+        mock.risk.score = 92;
+        mock.risk.level = 'CRITICAL';
+        mock.pipeline_trajectory[0].detail = 'Acoustic sensor node captured high-decibel ballistic gunshot impulse.';
+        mock.pipeline_trajectory[1].detail = 'Refined to active wildlife poaching incident in national park sanctuary.';
+        setIncidents((prev) => [mock, ...prev]);
+        setSelectedIncident(mock);
+        showNotification(`Simulated Gunshot incident [${mock.event.id}] (Demo Mode)`, 'warning');
+        return;
+      }
+      const res = await simulatePoaching();
+      showNotification(`Simulated Gunshot event [${res.event?.id}] processed: ${res.classification?.refined_type}`, 'warning');
+      await fetchIncidents(false);
+      setSelectedIncident(res);
+    } catch (err) {
+      showNotification(`Error simulating poaching: ${err.message}`, 'error');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleManualOceanIngest = async () => {
+    try {
+      setActionLoading(true);
+      if (!backendOnline) {
+        showNotification('Backend not connected — cannot trigger live ocean poll', 'info');
+        return;
+      }
+      showNotification('Triggering automated GFW ocean ingestion cycle...', 'info');
+      const res = await triggerOceanIngest('auto', 5);
+      showNotification(`Ingestion complete: ${res.newly_processed_count || 0} processed, ${res.duplicate_count || 0} duplicates.`, 'success');
+      await fetchIncidents(false);
+      const st = await getOceanIngestStatus();
+      setIngestStatus(st);
+    } catch (err) {
+      showNotification(`Manual ingestion failed: ${err.message}`, 'error');
     } finally {
       setActionLoading(false);
     }
@@ -347,6 +399,13 @@ export default function App() {
               🌲 Simulate Chainsaw
             </button>
             <button
+              className="btn btn-demo btn-poaching"
+              onClick={handleSimulatePoaching}
+              disabled={actionLoading}
+            >
+              💥 Simulate Gunshot
+            </button>
+            <button
               className="btn btn-demo btn-ocean"
               onClick={handleSimulateOcean}
               disabled={actionLoading}
@@ -419,6 +478,23 @@ export default function App() {
               Mode: <strong style={{ color: '#38bdf8' }}>{ingestStatus.mode}</strong> | Fetched: {ingestStatus.last_fetched_count} | Processed: {ingestStatus.last_processed_count} | Duplicates: {ingestStatus.last_duplicate_count}
             </span>
           )}
+          <button
+            onClick={handleManualOceanIngest}
+            disabled={actionLoading}
+            style={{
+              background: '#0284c7',
+              color: '#fff',
+              border: 'none',
+              padding: '3px 10px',
+              borderRadius: '4px',
+              cursor: 'pointer',
+              fontSize: '11px',
+              fontWeight: 600,
+            }}
+            title="Trigger immediate GFW ocean ingestion poll"
+          >
+            🔄 Ingest GFW Now
+          </button>
         </div>
         <div>
           <span style={{ fontStyle: 'italic', fontSize: '11px' }}>

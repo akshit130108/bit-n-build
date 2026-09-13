@@ -7,6 +7,7 @@ from adapters.fake_events import (
     generate_historical_events,
     generate_land_event,
     generate_ocean_event,
+    generate_poaching_event,
 )
 from adapters.ocean_scheduler import ocean_scheduler
 from database.firestore import db_client
@@ -179,6 +180,30 @@ def demo_fake_land() -> PipelineResult:
 def demo_fake_ocean() -> PipelineResult:
     event = generate_ocean_event()
     return process_event(event)
+
+
+@app.post(
+    "/demo/fake-poaching",
+    response_model=PipelineResult,
+    tags=["Demo"],
+    summary="Simulate a real-time wildlife poaching gunshot event in a protected sanctuary",
+)
+def demo_fake_poaching() -> PipelineResult:
+    event = generate_poaching_event()
+    return process_event(event)
+
+
+@app.post(
+    "/demo/live-ocean",
+    tags=["Demo"],
+    summary="Trigger immediate automated ingestion of ocean AIS data from GFW",
+)
+def demo_live_ocean(
+    mode: str = Query(default="auto", description="Data mode: 'auto', 'live', or 'simulated'"),
+    limit: int = Query(default=5, ge=1, le=50, description="Max events to fetch"),
+) -> Dict[str, Any]:
+    from adapters.ocean_ingest import ingest_ocean_events
+    return ingest_ocean_events(mode=mode, limit=limit)
 
 
 @app.post(

@@ -18,15 +18,16 @@ from fastapi.testclient import TestClient
 def main():
     print("=== PHASE 9 END-TO-END SMOKE TEST ===")
     token = os.environ.get("GFW_API_TOKEN")
-    print("GFW API Token present in os.environ:", bool(token))
+    mode = "live" if token else "auto"
+    print(f"GFW API Token present in os.environ: {bool(token)} (Running smoke test in mode: '{mode}')")
     
     limit = 3
-    print(f"\n1. Fetching live events directly via fetch_ocean_events(mode='live', limit={limit})...")
-    raw_fetched = fetch_ocean_events(mode="live", limit=limit)
+    print(f"\n1. Fetching ocean events directly via fetch_ocean_events(mode='{mode}', limit={limit})...")
+    raw_fetched = fetch_ocean_events(mode=mode, limit=limit)
     print(f"Fetched raw GFW events count: {len(raw_fetched)}")
 
-    print(f"\n2. Ingesting via ingest_ocean_events(mode='live', limit={limit})...")
-    ingest_res = ingest_ocean_events(mode="live", limit=limit)
+    print(f"\n2. Ingesting via ingest_ocean_events(mode='{mode}', limit={limit})...")
+    ingest_res = ingest_ocean_events(mode=mode, limit=limit)
     print("Ingestion result summary:")
     print(" - fetched_count:", ingest_res["fetched_count"])
     print(" - duplicate_count:", ingest_res["duplicate_count"])

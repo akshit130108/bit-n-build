@@ -37,6 +37,7 @@ export default function App() {
   const [apiUrl, setApiUrl] = useState(getApiBaseUrl());
   const [inputUrl, setInputUrl] = useState(apiUrl);
   const [showConfig, setShowConfig] = useState(false);
+  const [dismissError, setDismissError] = useState(false);
   const [ingestStatus, setIngestStatus] = useState(null);
 
   // Set initial selected incident from demo data
@@ -544,11 +545,11 @@ export default function App() {
         </div>
       )}
 
-      {/* API Error Banner with 1-Click Reconnect */}
-      {apiError && (
+      {/* API Error Banner with 1-Click Reconnect & Dismiss */}
+      {apiError && !dismissError && (
         <div className="error-banner">
           <div className="error-banner-text">
-            ⚠️ <strong>Connection Issue:</strong> {apiError}
+            ⚠️ <strong>Backend Note:</strong> {apiError} — <em>(Operating in Standalone Demo Mode with full simulation & audio active)</em>
           </div>
           <div className="error-banner-quick-actions">
             <span>Connect to:</span>
@@ -564,18 +565,13 @@ export default function App() {
             >
               💻 Localhost:8000
             </button>
-            <input
-              type="text"
-              value={inputUrl}
-              onChange={(e) => setInputUrl(e.target.value)}
-              placeholder="Custom API URL (e.g. https://...onrender.com)"
-              className="api-url-input-inline"
-            />
             <button
-              className="btn-url-save"
-              onClick={() => handleUpdateApiUrl(inputUrl)}
+              className="btn-quick-url"
+              style={{ background: '#059669', color: '#fff', fontWeight: 600 }}
+              onClick={() => setDismissError(true)}
+              title="Hide banner and continue in Standalone Demo Mode for clean video recording"
             >
-              Save & Connect
+              ✓ Dismiss (Demo Mode)
             </button>
           </div>
         </div>

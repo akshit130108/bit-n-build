@@ -52,8 +52,11 @@ export async function playEventAudio(eventType, onEnded) {
   let wavPath = '/audio/chainsaw.wav';
   let isGunshot = false;
   let isOcean = false;
+  let isInvasive = false;
 
-  if (normalizedType.includes('gun') || normalizedType.includes('poach')) {
+  if (normalizedType.includes('invasive') || normalizedType.includes('pest') || normalizedType.includes('frog') || normalizedType.includes('bio')) {
+    isInvasive = true;
+  } else if (normalizedType.includes('gun') || normalizedType.includes('poach')) {
     wavPath = '/audio/gunshot.wav';
     isGunshot = true;
   } else if (normalizedType.includes('ocean') || normalizedType.includes('vessel') || normalizedType.includes('fish')) {
@@ -61,41 +64,68 @@ export async function playEventAudio(eventType, onEnded) {
     isOcean = true;
   }
 
-  // Attempt 1: Fetch and decode real WAV file
-  try {
-    const response = await fetch(wavPath);
-    if (response.ok) {
-      const arrayBuffer = await response.arrayBuffer();
-      const audioBuffer = await ctx.decodeAudioData(arrayBuffer);
-      
-      const source = ctx.createBufferSource();
-      source.buffer = audioBuffer;
-      source.connect(analyser);
-      analyser.connect(ctx.destination);
+  // Attempt 1: Fetch and decode real WAV file (for gunshot, ocean, chainsaw)
+  if (!isInvasive) {
+    try {
+      const response = await fetch(wavPath);
+      if (response.ok) {
+        const arrayBuffer = await response.arrayBuffer();
+        const audioBuffer = await ctx.decodeAudioData(arrayBuffer);
+        
+        const source = ctx.createBufferSource();
+        source.buffer = audioBuffer;
+        source.connect(analyser);
+        analyser.connect(ctx.destination);
 
-      source.onended = () => {
-        if (currentSource === source) currentSource = null;
-        if (onEnded) onEnded();
-      };
+        source.onended = () => {
+          if (currentSource === source) currentSource = null;
+          if (onEnded) onEnded();
+        };
 
-      source.start(0);
-      currentSource = source;
-      return { analyser, duration: audioBuffer.duration };
+        source.start(0);
+        currentSource = source;
+        return { analyser, duration: audioBuffer.duration };
+      }
+    } catch (err) {
+      console.warn(`WAV file fetch failed (${wavPath}), using Web Audio synthesis:`, err);
     }
-  } catch (err) {
-    console.warn(`WAV file fetch failed (${wavPath}), using Web Audio synthesis:`, err);
   }
 
   // Attempt 2: Live Web Audio Synthesizer Fallback
-  return synthesizeAcousticSignal(ctx, analyser, isGunshot, isOcean, onEnded);
+  return synthesizeAcousticSignal(ctx, analyser, isGunshot, isOcean, isInvasive, onEnded);
 }
 
-function synthesizeAcousticSignal(ctx, analyser, isGunshot, isOcean, onEnded) {
+function synthesizeAcousticSignal(ctx, analyser, isGunshot, isOcean, isInvasive, onEnded) {
   const masterGain = ctx.createGain();
   masterGain.connect(analyser);
   analyser.connect(ctx.destination);
 
   const now = ctx.currentTime;
+
+  if (isInvasive) {
+    // === Bio-Acoustic Invasive Vocalization Profile (4.8 kHz Stridulation) ===
+    const duration = 2.4;
+    const osc = ctx.createOscillator();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(3200, now);
+    osc.frequency.exponentialRampToValueAtTime(5200, now + 0.4);
+    osc.frequency.exponentialRampToValueAtTime(3800, now + 0.8);
+    osc.frequency.exponentialRampToValueAtTime(5600, now + 1.2);
+    osc.frequency.exponentialRampToValueAtTime(2400, now + 2.0);
+
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(0.35, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + duration);
+
+    osc.connect(gain);
+    gain.connect(masterGain);
+    osc.start(now);
+    osc.stop(now + duration);
+
+    setTimeout(() => { if (onEnded) onEnded(); }, duration * 1000);
+    currentSource = { stop: () => { masterGain.gain.setValueAtTime(0, ctx.currentTime); } };
+    return { analyser, duration };
+  }
 
   if (isGunshot) {
     // === Ballistic Gunshot Synthesis ===

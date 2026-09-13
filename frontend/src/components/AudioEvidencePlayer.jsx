@@ -16,20 +16,23 @@ export default function AudioEvidencePlayer({ incident }) {
   const domain = event.domain || 'land';
   const eventType = (classification.refined_type || event.event_type || '').toLowerCase();
 
-  const isGunshot = eventType.includes('gun') || eventType.includes('poach');
-  const isOcean = domain === 'ocean' || eventType.includes('vessel');
-  const isChainsaw = !isGunshot && !isOcean;
+  const isInvasive = eventType.includes('invasive') || eventType.includes('pest') || eventType.includes('frog');
+  const isGunshot = !isInvasive && (eventType.includes('gun') || eventType.includes('poach'));
+  const isOcean = !isInvasive && (domain === 'ocean' || eventType.includes('vessel'));
+  const isChainsaw = !isInvasive && !isGunshot && !isOcean;
 
-  const audioTitle = isGunshot
+  const audioTitle = isInvasive
+    ? 'Bio-Acoustic Invasive Vocalization Profile'
+    : isGunshot
     ? 'Ballistic Gunfire Acoustic Impulse'
     : isOcean
     ? 'Marine Hydrophone Acoustic Telemetry'
     : 'Mechanical Chainsaw Acoustic Signature';
 
-  const peakFreq = isGunshot ? '3,200 Hz' : isOcean ? '840 Hz' : '2,450 Hz';
-  const snr = metadata.snr_db ? `${metadata.snr_db} dB` : isGunshot ? '22.1 dB' : isOcean ? '14.2 dB' : '18.5 dB';
-  const sensorLabel = event.sensor_id || (isOcean ? 'HYDROPHONE_BUOY_04' : 'ACOUSTIC_NODE_S07');
-  const sampleDuration = isGunshot ? 2.0 : isOcean ? 2.5 : 3.2;
+  const peakFreq = isInvasive ? '4,850 Hz' : isGunshot ? '3,200 Hz' : isOcean ? '840 Hz' : '2,450 Hz';
+  const snr = metadata.snr_db ? `${metadata.snr_db} dB` : isInvasive ? '16.8 dB' : isGunshot ? '22.1 dB' : isOcean ? '14.2 dB' : '18.5 dB';
+  const sensorLabel = event.sensor_id || (isInvasive ? 'BIO_ACOUSTIC_ARRAY_03' : isOcean ? 'HYDROPHONE_BUOY_04' : 'ACOUSTIC_NODE_S07');
+  const sampleDuration = isInvasive ? 2.8 : isGunshot ? 2.0 : isOcean ? 2.5 : 3.2;
 
   // Cleanup on unmount or incident change
   useEffect(() => {

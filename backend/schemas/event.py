@@ -75,6 +75,7 @@ class ActionResult(BaseModel):
     message: str
     requires_approval: bool
     dispatched: bool = False
+    countermeasure: Optional[Dict[str, Any]] = None
     reasons: List[str] = Field(default_factory=list)
 
 

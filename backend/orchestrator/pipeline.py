@@ -78,6 +78,8 @@ def approve_incident(
 
     # Dispatch Action
     incident_dict["action"]["dispatched"] = True
+    if incident_dict["action"].get("countermeasure"):
+        incident_dict["action"]["countermeasure"]["autonomous_status"] = "DEPLOYED & TRANSMITTING"
     incident_dict["action"]["reasons"].append(
         f"Operational action confirmed and dispatched by {reviewer}"
     )
@@ -105,6 +107,8 @@ def reject_incident(
 
     incident_dict["action"]["dispatched"] = False
     incident_dict["action"]["action"] = "CANCELLED"
+    if incident_dict["action"].get("countermeasure"):
+        incident_dict["action"]["countermeasure"]["autonomous_status"] = "DISARMED / CANCELLED"
     incident_dict["action"]["message"] = f"Action cancelled following human review: {notes or 'Dismissed'}"
     incident_dict["updated_at"] = datetime.now(timezone.utc).isoformat()
 

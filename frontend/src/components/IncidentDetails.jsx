@@ -153,6 +153,67 @@ export default function IncidentDetails({
       {/* Acoustic Forensics & Live Audio Capture Player */}
       <AudioEvidencePlayer incident={incident} />
 
+      {/* Bio-Acoustics & Ecological Defense: Targeted Acoustic Countermeasure */}
+      <div className="dossier-card countermeasure-card" style={{
+        marginTop: '16px',
+        border: '1px solid rgba(16, 185, 129, 0.4)',
+        background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.08) 0%, rgba(15, 23, 42, 0.6) 100%)',
+        padding: '14px 18px',
+        borderRadius: '8px',
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
+          <h4 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '8px', color: '#10b981', fontSize: '14px' }}>
+            <span>🔊</span> Targeted Acoustic Countermeasure Deployment
+          </h4>
+          <span style={{
+            padding: '2px 8px',
+            borderRadius: '4px',
+            fontSize: '11px',
+            fontWeight: 700,
+            letterSpacing: '0.05em',
+            background: (action.countermeasure?.autonomous_status || '').includes('DEPLOYED') || isApproved ? 'rgba(16, 185, 129, 0.2)' : 'rgba(245, 158, 11, 0.2)',
+            color: (action.countermeasure?.autonomous_status || '').includes('DEPLOYED') || isApproved ? '#34d399' : '#fbbf24',
+            border: (action.countermeasure?.autonomous_status || '').includes('DEPLOYED') || isApproved ? '1px solid rgba(16, 185, 129, 0.5)' : '1px solid rgba(245, 158, 11, 0.5)',
+          }}>
+            {action.countermeasure?.autonomous_status || (action.dispatched || isApproved ? 'AUTONOMOUSLY DEPLOYED' : 'ARMED (PENDING GATE)')}
+          </span>
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '10px', fontSize: '12px' }}>
+          <div>
+            <span style={{ color: 'var(--text-muted)' }}>Countermeasure Type:</span>
+            <div style={{ fontWeight: 600, color: '#f3f4f6' }}>
+              {action.countermeasure?.name || (event.event_type === 'gunshot' ? 'Directional Sonic Warning Pulse' : event.domain === 'ocean' ? 'Underwater Acoustic Transponder Hail' : 'Bio-Acoustic Interdiction Siren')}
+            </div>
+          </div>
+          <div>
+            <span style={{ color: 'var(--text-muted)' }}>Frequency & Profile:</span>
+            <div style={{ fontFamily: 'monospace', color: '#38bdf8' }}>
+              {action.countermeasure?.frequency_hz || (event.event_type === 'gunshot' ? '3,200 Hz Directional Strobe' : event.domain === 'ocean' ? '37.5 kHz Underwater Ping' : '1,800 - 2,500 Hz Multi-Tone Siren')}
+            </div>
+          </div>
+          <div>
+            <span style={{ color: 'var(--text-muted)' }}>Output Acoustic Intensity:</span>
+            <div style={{ fontFamily: 'monospace', color: '#f59e0b', fontWeight: 700 }}>
+              {action.countermeasure?.intensity_db || (event.event_type === 'gunshot' ? '125 dB Directional Pulse' : event.domain === 'ocean' ? '160 dB Hydrophone Ping' : '115 dB Area Broadcast')}
+            </div>
+          </div>
+          <div>
+            <span style={{ color: 'var(--text-muted)' }}>Target Node Array:</span>
+            <div style={{ fontFamily: 'monospace', color: '#a78bfa' }}>
+              {action.countermeasure?.target_node || event.sensor_id || 'ACOUSTIC_NODE_ARRAY_01'}
+            </div>
+          </div>
+        </div>
+
+        <div style={{ marginTop: '10px', padding: '8px 12px', background: 'rgba(0,0,0,0.3)', borderRadius: '6px', fontSize: '12px', borderLeft: '3px solid #10b981' }}>
+          <strong>Acoustic Broadcast Payload:</strong>{' '}
+          <span style={{ fontStyle: 'italic', color: '#d1d5db' }}>
+            "{action.countermeasure?.broadcast_message || (event.event_type === 'gunshot' ? 'Automated Warning: You are inside a protected wildlife reserve. Acoustic triangulation locked. Ranger intercept unit alerted.' : event.domain === 'ocean' ? 'Notice to Mariners: Vessel transiting restricted Marine Protected Area. AIS reactivation mandatory.' : 'Warning: Unauthorized forestry activity detected by Bio-Acoustic Sensor Mesh. Vacate sector immediately.')}"
+          </span>
+        </div>
+      </div>
+
       {/* Dossier Grid */}
       <div className="dossier-grid">
 

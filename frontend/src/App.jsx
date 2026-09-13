@@ -176,6 +176,87 @@ export default function App() {
     }
   };
 
+  const handleSimulateInvasive = async () => {
+    try {
+      setActionLoading(true);
+      const mock = {
+        event: {
+          id: `evt_bio_inv_${Date.now().toString(36)}`,
+          domain: 'land',
+          event_type: 'invasive_species_vocalization',
+          confidence: 0.94,
+          sensor_id: 'BIO_ACOUSTIC_ARRAY_03',
+          timestamp: new Date().toISOString(),
+          location: { lat: 11.845, lon: 76.135 },
+          metadata: {
+            snr_db: 16.8,
+            frequency_peak: '4,850 Hz',
+            species_match: 'Invasive Bullfrog / Predator Bio-Signature',
+            protected_area: true,
+          }
+        },
+        classification: {
+          refined_type: 'invasive_species_infestation',
+          category: 'invasive_biodiversity_threat',
+          urgency: 'high',
+          reasons: ['Bio-acoustic sensor array matched invasive species frequency profile (4.85 kHz stridulation)', 'Nesting wetland reserve zone breached']
+        },
+        verification: {
+          level: 'high',
+          score: 0.96,
+          reasons: ['Acoustic harmonic verification confirmed', 'Cross-referenced against native bio-diversity audio baseline']
+        },
+        localization: {
+          lat: 11.845,
+          lon: 76.135,
+          radius_meters: 110,
+          sector_name: 'Wetland Sanctuary Reserve (Sector-12)',
+          reasons: ['Acoustic array time-difference-of-arrival (TDOA) triangulated location']
+        },
+        memory: {
+          historical_events: 1,
+          recurrence_detected: false,
+          recent_incidents: [],
+          reasons: ['First bio-acoustic anomaly detection in Sector-12 wetland this season']
+        },
+        risk: {
+          score: 74,
+          level: 'HIGH',
+          reasons: ['Invasive species threatens endemic amphibian nesting colonies', 'High bio-acoustic confidence (0.96)'],
+          factors: { base_threat: 28, evidence_score: 24, ecological_sensitivity: 22 }
+        },
+        human_gate: {
+          requires_human: false,
+          status: 'AUTO_APPROVED',
+          reasons: ['Autonomous non-lethal bio-acoustic deterrence authorized under ecological defense protocol']
+        },
+        action: {
+          action: 'DEPLOY_BIOACOUSTIC_DISRUPTOR',
+          message: 'Targeted predator bio-acoustic playback and ultrasonic dispersal active.',
+          requires_approval: false,
+          dispatched: true,
+          countermeasure: {
+            type: 'BIOACOUSTIC_DISPERSAL_PLAYBACK',
+            name: 'Targeted Predator Bio-Acoustic Dispersal Call',
+            target_node: 'BIO_ACOUSTIC_ARRAY_03',
+            frequency_hz: '18.5 kHz Ultrasound / Predator Vocalization',
+            intensity_db: '95 dB Targeted Scatter',
+            broadcast_message: 'Autonomous bio-acoustic playback active: synthesizing territorial predator distress call to scatter invasive species.',
+            autonomous_status: 'AUTONOMOUSLY DEPLOYED & ACTIVE',
+          },
+          reasons: ['Autonomous bio-acoustic countermeasure deployed: predator playback activated to disperse invasive species']
+        },
+      };
+      setIncidents((prev) => [mock, ...prev]);
+      setSelectedIncident(mock);
+      showNotification(`Bio-Acoustic Threat: Autonomous predatory playback countermeasure deployed!`, 'success');
+    } catch (err) {
+      showNotification(`Error: ${err.message}`, 'error');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
   const handleManualOceanIngest = async () => {
     try {
       setActionLoading(true);
@@ -405,6 +486,15 @@ export default function App() {
               disabled={actionLoading}
             >
               💥 Simulate Gunshot
+            </button>
+            <button
+              className="btn btn-demo btn-invasive"
+              onClick={handleSimulateInvasive}
+              disabled={actionLoading}
+              style={{ background: 'rgba(16, 185, 129, 0.18)', borderColor: 'rgba(16, 185, 129, 0.5)', color: '#34d399' }}
+              title="Autonomous Bio-Acoustic Countermeasure against Invasive Species"
+            >
+              🐸 Bio-Acoustic Deterrent
             </button>
             <button
               className="btn btn-demo btn-ocean"

@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import RiskBadge from './RiskBadge';
+import AudioEvidencePlayer from './AudioEvidencePlayer';
 
 export default function IncidentDetails({
   incident,
@@ -148,6 +149,9 @@ export default function IncidentDetails({
           </div>
         )}
       </div>
+
+      {/* Acoustic Forensics & Live Audio Capture Player */}
+      <AudioEvidencePlayer incident={incident} />
 
       {/* Dossier Grid */}
       <div className="dossier-grid">

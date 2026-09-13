@@ -32,9 +32,17 @@ export default function IncidentDetails({
   } = incident;
 
   const eventId = event.id;
+  const metadata = event.metadata || {};
   const isWaiting = human_gate.status === 'WAITING_FOR_APPROVAL';
   const isApproved = human_gate.status === 'APPROVED' || human_gate.status === 'AUTO_APPROVED';
   const isRejected = human_gate.status === 'REJECTED';
+
+  // Truthful provenance detection
+  const isLive = metadata.data_mode === 'live' || metadata.source === 'global_fishing_watch' || event.sensor_id === 'GFW_AIS';
+  const provenanceLabel = isLive ? 'LIVE GFW API DATA' : 'SIMULATED DEMO DATA';
+  const provenanceSubtext = isLive
+    ? 'Verified observation retrieved from Global Fishing Watch v3 API'
+    : 'Simulated demonstration event modeled on EEZ boundary fishing behavior';
 
   const handleApprove = () => {
     onApprove(eventId, 'ranger_supervisor', operatorNotes || 'Operational clearance granted');
@@ -56,13 +64,28 @@ export default function IncidentDetails({
       {/* Top Banner */}
       <div className="details-header">
         <div>
-          <div className="details-id-row">
+          <div className="details-id-row" style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
             <span className="event-id">{eventId}</span>
             <span className={`domain-badge ${event.domain}`}>
               {event.domain?.toUpperCase()}
             </span>
+            <span className={`provenance-badge ${isLive ? 'live' : 'simulated'}`} style={{
+              padding: '3px 8px',
+              borderRadius: '6px',
+              fontSize: '11px',
+              fontWeight: 700,
+              letterSpacing: '0.05em',
+              background: isLive ? 'rgba(6, 182, 212, 0.15)' : 'rgba(245, 158, 11, 0.15)',
+              color: isLive ? '#38bdf8' : '#fbbf24',
+              border: isLive ? '1px solid rgba(6, 182, 212, 0.4)' : '1px solid rgba(245, 158, 11, 0.4)',
+            }}>
+              {isLive ? '📡 ' : '🔬 '}{provenanceLabel}
+            </span>
           </div>
           <h2 className="details-title">{classification.refined_type || event.event_type}</h2>
+          <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '4px' }}>
+            Timestamp: {event.timestamp ? new Date(event.timestamp).toUTCString() : 'N/A'} • Sensor: {event.sensor_id}
+          </div>
         </div>
         <div className="details-risk-block">
           <RiskBadge level={risk.level} score={risk.score} />
@@ -128,6 +151,76 @@ export default function IncidentDetails({
 
       {/* Dossier Grid */}
       <div className="dossier-grid">
+
+        {/* Provenance & Data Origin Card */}
+        <div className="dossier-card" style={{ gridColumn: 'span 2' }}>
+          <h4>Data Provenance & Sensor Origin</h4>
+          <div className="dossier-row">
+            <span className="dossier-label">Data Mode:</span>
+            <span className="dossier-val font-semibold" style={{ color: isLive ? '#38bdf8' : '#fbbf24' }}>
+              {isLive ? 'LIVE OBSERVATION' : 'SIMULATED DEMO'}
+            </span>
+          </div>
+          <div className="dossier-row">
+            <span className="dossier-label">Telemetry Source:</span>
+            <span className="dossier-val font-mono">{metadata.source || (isLive ? 'global_fishing_watch' : 'ecosentinel_demo')}</span>
+          </div>
+          <div className="dossier-row">
+            <span className="dossier-label">Sensor Identifier:</span>
+            <span className="dossier-val font-mono">{event.sensor_id}</span>
+          </div>
+          {metadata.gfw_event_id && (
+            <div className="dossier-row">
+              <span className="dossier-label">GFW Event ID:</span>
+              <span className="dossier-val font-mono">{metadata.gfw_event_id}</span>
+            </div>
+          )}
+          {metadata.dataset && (
+            <div className="dossier-row">
+              <span className="dossier-label">GFW Dataset:</span>
+              <span className="dossier-val font-mono">{metadata.dataset}</span>
+            </div>
+          )}
+          <div className="reason-item" style={{ marginTop: '8px', fontSize: '12px', fontStyle: 'italic' }}>
+            ℹ️ {provenanceSubtext}
+          </div>
+        </div>
+
+        {/* Ocean Vessel Telemetry Card (when domain is ocean) */}
+        {event.domain === 'ocean' && (
+          <div className="dossier-card" style={{ gridColumn: 'span 2' }}>
+            <h4>Ocean Vessel & Telemetry Intelligence</h4>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px' }}>
+              <div>
+                <span className="dossier-label">Vessel ID / Identifier:</span>
+                <div className="dossier-val font-mono font-semibold">{metadata.vessel_id || 'UNKNOWN_VESSEL'}</div>
+              </div>
+              <div>
+                <span className="dossier-label">Vessel Type:</span>
+                <div className="dossier-val font-semibold">{metadata.vessel_type || 'FISHING'}</div>
+              </div>
+              <div>
+                <span className="dossier-label">Flag State:</span>
+                <div className="dossier-val font-bold" style={{ color: '#38bdf8' }}>🏴 {metadata.flag || 'UNKNOWN'}</div>
+              </div>
+              <div>
+                <span className="dossier-label">AIS Gap Duration:</span>
+                <div className="dossier-val font-mono text-amber">
+                  {metadata.ais_gap_hours ? `${metadata.ais_gap_hours} hrs` : (metadata.ais_disabled ? 'Gap Detected' : 'No Gap Reported')}
+                </div>
+              </div>
+              <div>
+                <span className="dossier-label">Loitering Pattern:</span>
+                <div className="dossier-val">{metadata.loitering ? '🚨 Yes (Suspicious)' : 'No'}</div>
+              </div>
+              <div>
+                <span className="dossier-label">Encounter / Transshipment:</span>
+                <div className="dossier-val">{metadata.encounter ? '🚨 Yes (Detected)' : 'No'}</div>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Classification & Threat */}
         <div className="dossier-card">
           <h4>Classification Refinement</h4>
@@ -174,11 +267,11 @@ export default function IncidentDetails({
 
         {/* Localization & Spatial Context */}
         <div className="dossier-card">
-          <h4>Geographic Localization</h4>
+          <h4>Geographic Localization & Sanctuary</h4>
           <div className="dossier-row">
             <span className="dossier-label">Coordinates:</span>
             <span className="dossier-val font-mono">
-              {localization.lat?.toFixed(4)}, {localization.lon?.toFixed(4)}
+              {event.location?.lat?.toFixed(4) || localization.lat?.toFixed(4)}, {event.location?.lon?.toFixed(4) || localization.lon?.toFixed(4)}
             </span>
           </div>
           <div className="dossier-row">
@@ -186,15 +279,15 @@ export default function IncidentDetails({
             <span className="dossier-val">{localization.sector_name}</span>
           </div>
           <div className="dossier-row">
-            <span className="dossier-label">Uncertainty Radius:</span>
-            <span className="dossier-val font-mono">±{Math.round(localization.radius_meters || 0)}m</span>
+            <span className="dossier-label">Protected Area:</span>
+            <span className="dossier-val text-emerald font-semibold">
+              {metadata.protected_area_name || (metadata.protected_area ? 'Designated Sanctuary' : 'Outside Reserve')}
+            </span>
           </div>
-          {event.metadata?.protected_area && (
+          {metadata.distance_to_boundary_km !== undefined && metadata.distance_to_boundary_km !== null && (
             <div className="dossier-row">
-              <span className="dossier-label">Protected Area:</span>
-              <span className="dossier-val text-emerald font-semibold">
-                {event.metadata?.protected_area_name || 'Designated Sanctuary'}
-              </span>
+              <span className="dossier-label">Boundary Distance:</span>
+              <span className="dossier-val font-mono">{metadata.distance_to_boundary_km} km ({metadata.boundary_source})</span>
             </div>
           )}
           <div className="dossier-reasons">

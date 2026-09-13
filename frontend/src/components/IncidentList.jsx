@@ -41,12 +41,15 @@ export default function IncidentList({ incidents = [], selectedIncident, onSelec
           filtered.map((inc) => {
             const isSelected = selectedIncident?.event?.id === inc.event?.id;
             const domain = inc.event?.domain || 'land';
-            const eventType = inc.event?.event_type || 'Unknown';
+            const eventType = inc.classification?.refined_type || inc.event?.event_type || 'Unknown';
             const riskLevel = inc.risk?.level || 'LOW';
             const riskScore = inc.risk?.score;
             const confidencePct = Math.round((inc.event?.confidence || 0) * 100);
             const status = inc.human_gate?.status || 'MONITORING';
             const isWaiting = status === 'WAITING_FOR_APPROVAL';
+
+            const metadata = inc.event?.metadata || {};
+            const isLive = metadata.data_mode === 'live' || metadata.source === 'global_fishing_watch' || inc.event?.sensor_id === 'GFW_AIS';
 
             const timeStr = inc.event?.timestamp
               ? new Date(inc.event.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
@@ -63,6 +66,19 @@ export default function IncidentList({ incidents = [], selectedIncident, onSelec
                     <span className={`domain-tag ${domain}`}>
                       {domain === 'land' ? '🌲 LAND' : '⚓ OCEAN'}
                     </span>
+                    {domain === 'ocean' && (
+                      <span className={`prov-tag ${isLive ? 'live' : 'sim'}`} style={{
+                        fontSize: '10px',
+                        padding: '1px 5px',
+                        borderRadius: '4px',
+                        fontWeight: 700,
+                        background: isLive ? 'rgba(6, 182, 212, 0.2)' : 'rgba(245, 158, 11, 0.2)',
+                        color: isLive ? '#38bdf8' : '#fbbf24',
+                        border: isLive ? '1px solid rgba(6, 182, 212, 0.4)' : '1px solid rgba(245, 158, 11, 0.4)',
+                      }}>
+                        {isLive ? '📡 LIVE GFW' : '🔬 SIMULATED'}
+                      </span>
+                    )}
                     <span className="card-event-name">{eventType}</span>
                   </div>
                   <RiskBadge level={riskLevel} score={riskScore} />
@@ -74,6 +90,12 @@ export default function IncidentList({ incidents = [], selectedIncident, onSelec
                   </span>
                   <span className="card-conf">{confidencePct}% conf</span>
                 </div>
+
+                {domain === 'ocean' && metadata.vessel_id && (
+                  <div style={{ fontSize: '11px', color: 'var(--text-muted)', margin: '4px 0 2px 0' }}>
+                    Vessel: <span style={{ color: '#f3f4f6', fontFamily: 'monospace' }}>{metadata.vessel_id}</span> ({metadata.flag || 'UNK'})
+                  </div>
+                )}
 
                 <div className="card-bottom">
                   <span className="card-time">{timeStr}</span>

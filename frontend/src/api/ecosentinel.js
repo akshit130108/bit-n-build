@@ -118,3 +118,13 @@ export async function seedRecurrence() {
     method: 'POST',
   });
 }
+
+export async function getOceanIngestStatus() {
+  return request('/ingest/ocean/status');
+}
+
+export async function triggerOceanIngest(mode = 'auto', limit = 10) {
+  return request(`/ingest/ocean?mode=${mode}&limit=${limit}`, {
+    method: 'POST',
+  });
+}

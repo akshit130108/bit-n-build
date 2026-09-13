@@ -6,6 +6,7 @@ import PipelineStatus from './components/PipelineStatus';
 import {
   getEvents,
   getHealth,
+  getOceanIngestStatus,
   approveEvent,
   rejectEvent,
   requestMoreEvidence,
@@ -34,6 +35,7 @@ export default function App() {
   const [apiUrl, setApiUrl] = useState(getApiBaseUrl());
   const [inputUrl, setInputUrl] = useState(apiUrl);
   const [showConfig, setShowConfig] = useState(false);
+  const [ingestStatus, setIngestStatus] = useState(null);
 
   // Set initial selected incident from demo data
   useEffect(() => {
@@ -47,7 +49,7 @@ export default function App() {
     setTimeout(() => setNotification(null), 4500);
   };
 
-  // Fetch all incidents from GET /events
+  // Fetch all incidents from GET /events and GET /ingest/ocean/status
   const fetchIncidents = useCallback(async (isInitial = false) => {
     if (isInitial) setLoading(true);
     try {
@@ -67,6 +69,14 @@ export default function App() {
         }
         return prev;
       });
+
+      // Try fetching background scheduler status
+      try {
+        const statusData = await getOceanIngestStatus();
+        setIngestStatus(statusData);
+      } catch (stErr) {
+        // Silently ignore if status API unavailable
+      }
     } catch (err) {
       setBackendOnline(false);
       setApiError(err.message || 'Connecting to EcoSentinel backend...');
@@ -143,30 +153,22 @@ export default function App() {
         spike.memory.recurrence_detected = true;
         spike.memory.historical_matches_count = 4;
         spike.memory.pattern_summary = 'Recurrence surge: 4 illegal chainsaw detections clustered in 12h.';
-        spike.pipeline_trajectory[5].detail = 'Risk surged to CRITICAL (96/100) due to 4 historical recurrence matches.';
         setIncidents((prev) => [spike, ...prev]);
         setSelectedIncident(spike);
         showNotification(`Recurrence Spike Demonstrated! Risk score surged to 96/100 (CRITICAL)`, 'warning');
         return;
       }
-      const res = await seedRecurrence();
-      const trigger = res.new_trigger_incident;
-      showNotification(`Recurrence Spike Demonstrated! 3 seeded incidents caused Risk score to surge to ${trigger.risk?.score}/100`, 'warning');
+      const res = await seedRecurrence(true);
+      showNotification(`Recurrence Spike Demonstrated! Risk score surged to ${res.risk?.score}/100`, 'warning');
       await fetchIncidents(false);
-      setSelectedIncident(trigger);
+      setSelectedIncident(res);
     } catch (err) {
-      const spike = createMockLandIncident();
-      spike.risk.score = 96;
-      spike.risk.level = 'CRITICAL';
-      setIncidents((prev) => [spike, ...prev]);
-      setSelectedIncident(spike);
-      showNotification(`Recurrence Spike Demonstrated (Demo Mode)`, 'warning');
+      showNotification(`Error seeding recurrence: ${err.message}`, 'error');
     } finally {
       setActionLoading(false);
     }
   };
 
-  // Approval Handlers
   const handleApprove = async (id, reviewer, notes) => {
     try {
       setActionLoading(true);
@@ -177,7 +179,7 @@ export default function App() {
               const updated = {
                 ...inc,
                 human_gate: { ...inc.human_gate, status: 'APPROVED', reviewer, notes },
-                action: { ...inc.action, status: 'DISPATCHED' },
+                action: { ...inc.action, dispatched: true },
               };
               setSelectedIncident(updated);
               return updated;
@@ -185,11 +187,11 @@ export default function App() {
             return inc;
           })
         );
-        showNotification(`Incident ${id} APPROVED (Demo Mode). Action dispatched.`, 'success');
+        showNotification(`Incident ${id} APPROVED (Demo Mode). Action dispatched!`, 'success');
         return;
       }
       const updated = await approveEvent(id, reviewer, notes);
-      showNotification(`Incident ${id} APPROVED. Action dispatched: ${updated.action?.action}`, 'success');
+      showNotification(`Incident ${id} APPROVED. Response action dispatched!`, 'success');
       setSelectedIncident(updated);
       await fetchIncidents(false);
     } catch (err) {
@@ -199,7 +201,7 @@ export default function App() {
             const updated = {
               ...inc,
               human_gate: { ...inc.human_gate, status: 'APPROVED', reviewer, notes },
-              action: { ...inc.action, status: 'DISPATCHED' },
+              action: { ...inc.action, dispatched: true },
             };
             setSelectedIncident(updated);
             return updated;
@@ -207,7 +209,7 @@ export default function App() {
           return inc;
         })
       );
-      showNotification(`Incident ${id} APPROVED (Demo Mode). Action dispatched.`, 'success');
+      showNotification(`Incident ${id} APPROVED (Demo Mode). Action dispatched!`, 'success');
     } finally {
       setActionLoading(false);
     }
@@ -223,7 +225,7 @@ export default function App() {
               const updated = {
                 ...inc,
                 human_gate: { ...inc.human_gate, status: 'REJECTED', reviewer, notes },
-                action: { ...inc.action, status: 'CANCELLED' },
+                action: { ...inc.action, dispatched: false, status: 'CANCELLED' },
               };
               setSelectedIncident(updated);
               return updated;
@@ -235,7 +237,7 @@ export default function App() {
         return;
       }
       const updated = await rejectEvent(id, reviewer, notes);
-      showNotification(`Incident ${id} REJECTED. Action cancelled.`, 'info');
+      showNotification(`Incident ${id} REJECTED. Response action cancelled.`, 'info');
       setSelectedIncident(updated);
       await fetchIncidents(false);
     } catch (err) {
@@ -245,7 +247,7 @@ export default function App() {
             const updated = {
               ...inc,
               human_gate: { ...inc.human_gate, status: 'REJECTED', reviewer, notes },
-              action: { ...inc.action, status: 'CANCELLED' },
+              action: { ...inc.action, dispatched: false, status: 'CANCELLED' },
             };
             setSelectedIncident(updated);
             return updated;
@@ -316,6 +318,8 @@ export default function App() {
     fetchIncidents(true);
   };
 
+  const oceanIncidentsCount = incidents.filter((i) => i.event?.domain === 'ocean').length;
+
   return (
     <div className="app-container">
       {/* Top Header */}
@@ -323,7 +327,7 @@ export default function App() {
         <div className="header-brand">
           <div className="brand-logo">
             <svg viewBox="0 0 24 24" width="28" height="28" fill="#10b981">
-              <path d="M12 2L4 5v6.09c0 5.05 3.41 9.76 8 10.91 4.59-1.15 8-5.86 8-10.91V5l-8-3zm-1 14h2v2h-2v-2zm0-8h2v6h-2V8z"/>
+              <path d="M12 2L4 5v6.09c0 5.05 3.41 9.76 8 10.91 4.59-1.15 8-5.86 8-10.91V5l-8-3zm-1 14h2v2h-2v-2zm0-8h2v6h-2V8z" />
             </svg>
           </div>
           <div>
@@ -372,8 +376,8 @@ export default function App() {
                 {backendOnline ? 'BACKEND ONLINE' : 'DISCONNECTED'}
               </span>
               {lastUpdated && (
-                <span className="last-sync">
-                  {lastUpdated.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                <span className="last-sync" style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                  • Last updated: {lastUpdated.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
                 </span>
               )}
             </div>
@@ -388,6 +392,40 @@ export default function App() {
           </div>
         </div>
       </header>
+
+      {/* Ocean Ingestion Polling Status Sub-Bar */}
+      <div className="ingestion-sub-bar" style={{
+        background: '#111827',
+        borderBottom: '1px solid #1f2937',
+        padding: '6px 24px',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        fontSize: '12px',
+        color: '#9ca3af',
+        flexWrap: 'wrap',
+        gap: '12px',
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+          <span>📊 <strong>Active Incidents:</strong> {incidents.length} total ({oceanIncidentsCount} Ocean)</span>
+          <span style={{ borderLeft: '1px solid #374151', paddingLeft: '12px' }}>
+            🛰️ <strong>Automated GFW Poller:</strong>{' '}
+            <span style={{ color: ingestStatus?.running ? '#10b981' : '#f59e0b', fontWeight: 600 }}>
+              {ingestStatus?.running ? 'ACTIVE (300s loop)' : 'INITIALIZING / STANDBY'}
+            </span>
+          </span>
+          {ingestStatus && (
+            <span style={{ borderLeft: '1px solid #374151', paddingLeft: '12px' }}>
+              Mode: <strong style={{ color: '#38bdf8' }}>{ingestStatus.mode}</strong> | Fetched: {ingestStatus.last_fetched_count} | Processed: {ingestStatus.last_processed_count} | Duplicates: {ingestStatus.last_duplicate_count}
+            </span>
+          )}
+        </div>
+        <div>
+          <span style={{ fontStyle: 'italic', fontSize: '11px' }}>
+            Periodic dashboard refresh (4s) • GFW API observations (30-day date window)
+          </span>
+        </div>
+      </div>
 
       {/* API Endpoint Config Drawer */}
       {showConfig && (

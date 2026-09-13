@@ -1,5 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import L from 'leaflet';
+import 'leaflet/dist/leaflet.css';
 
 // Custom SVG icon generator for Land vs Ocean events
 function createCustomIcon(domain, riskLevel, isSelected) {
@@ -96,14 +97,34 @@ export default function MapView({ incidents = [], selectedIncident, onSelectInci
 
       markersLayerRef.current = L.layerGroup().addTo(map);
       mapInstanceRef.current = map;
-    }
 
-    return () => {
-      if (mapInstanceRef.current) {
-        mapInstanceRef.current.remove();
-        mapInstanceRef.current = null;
+      // Force size recalculation after layout settles
+      const invalidate = () => {
+        if (mapInstanceRef.current) {
+          mapInstanceRef.current.invalidateSize();
+        }
+      };
+      setTimeout(invalidate, 100);
+      setTimeout(invalidate, 400);
+      setTimeout(invalidate, 1000);
+
+      // Responsive observer: guarantees map fills container on window/layout resize
+      let ro = null;
+      if (window.ResizeObserver && mapContainerRef.current) {
+        ro = new ResizeObserver(() => {
+          invalidate();
+        });
+        ro.observe(mapContainerRef.current);
       }
-    };
+
+      return () => {
+        if (ro) ro.disconnect();
+        if (mapInstanceRef.current) {
+          mapInstanceRef.current.remove();
+          mapInstanceRef.current = null;
+        }
+      };
+    }
   }, []);
 
   // Update Markers when incidents or selectedIncident change
@@ -169,6 +190,7 @@ export default function MapView({ incidents = [], selectedIncident, onSelectInci
     const map = mapInstanceRef.current;
     if (!map || !selectedIncident) return;
 
+    map.invalidateSize();
     const loc = selectedIncident.event?.location || selectedIncident.localization;
     if (loc && loc.lat !== undefined && loc.lon !== undefined) {
       map.flyTo([parseFloat(loc.lat), parseFloat(loc.lon)], Math.max(map.getZoom(), 8), {

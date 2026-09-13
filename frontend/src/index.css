@@ -36,7 +36,9 @@ body {
 .app-container {
   display: flex;
   flex-direction: column;
-  min-height: 100vh;
+  height: 100vh;
+  max-height: 100vh;
+  overflow: hidden;
 }
 
 /* Header */
@@ -328,7 +330,8 @@ body {
   display: grid;
   grid-template-columns: 1.15fr 0.85fr;
   flex: 1;
-  height: calc(100vh - 70px);
+  min-height: 0;
+  height: 100%;
   overflow: hidden;
 }
 
@@ -344,6 +347,8 @@ body {
   display: flex;
   flex-direction: column;
   border-right: 1px solid var(--border-color);
+  height: 100%;
+  min-height: 0;
   overflow: hidden;
 }
 
@@ -351,6 +356,8 @@ body {
   display: flex;
   flex-direction: column;
   overflow-y: auto;
+  height: 100%;
+  min-height: 0;
   background-color: var(--bg-primary);
   padding: 16px;
   gap: 16px;
@@ -360,14 +367,45 @@ body {
 .map-wrapper {
   position: relative;
   height: 52%;
-  min-height: 280px;
+  min-height: 260px;
   width: 100%;
+  overflow: hidden;
+  background-color: #0f172a;
 }
 
 .map-container {
-  width: 100%;
-  height: 100%;
+  width: 100% !important;
+  height: 100% !important;
+  position: absolute !important;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
   background-color: #0f172a;
+}
+
+/* Leaflet Containment & Offset Fixes */
+.map-wrapper .leaflet-container {
+  width: 100% !important;
+  height: 100% !important;
+  position: absolute !important;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: #0f172a !important;
+}
+
+.map-wrapper .leaflet-top {
+  top: 12px !important;
+}
+
+.map-wrapper .leaflet-left {
+  left: 12px !important;
+}
+
+.map-wrapper .leaflet-right {
+  right: 12px !important;
 }
 
 .map-legend {

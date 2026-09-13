@@ -60,6 +60,7 @@ def generate_ocean_event(
         "is_night": True,
         "ecological_sensitivity": "critical" if protected_area else "moderate",
         "ais_disabled": True,
+        "apparent_fishing": True,
         "speed_knots": 3.4,
         "radar_signature": "trawler",
     }

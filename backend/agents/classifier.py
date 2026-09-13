@@ -41,21 +41,65 @@ def classify_event(event: NormalizedEvent) -> ClassificationResult:
             reasons.append(f"General terrestrial detection for '{raw_type}'")
 
     elif domain == "ocean":
-        if "vessel" in raw_type or "ship" in raw_type or "boat" in raw_type:
-            refined_type = "possible_illegal_fishing"
-            category = "marine_violation"
-            urgency = "high"
-            reasons.append(f"Vessel signature '{raw_type}' detected inside marine protected corridor")
-        elif "sonar" in raw_type or "explosion" in raw_type or "blast" in raw_type:
+        metadata = event.metadata or {}
+        apparent_fishing = bool(metadata.get("apparent_fishing"))
+        loitering = bool(metadata.get("loitering"))
+        encounter = bool(metadata.get("encounter"))
+        ais_disabled = bool(metadata.get("ais_disabled"))
+        protected_area = bool(metadata.get("protected_area"))
+        dataset = str(metadata.get("dataset") or "").lower()
+
+        if "sonar" in raw_type or "explosion" in raw_type or "blast" in raw_type:
             refined_type = "possible_blast_fishing"
             category = "destructive_marine_practice"
             urgency = "critical"
             reasons.append(f"Acoustic blast signature '{raw_type}' indicative of dynamite fishing")
+
+        elif apparent_fishing or "fishing" in dataset or raw_type == "possible_illegal_fishing":
+            refined_type = "possible_illegal_fishing"
+            category = "marine_violation"
+            if protected_area or (ais_disabled and event.confidence >= 0.60) or event.confidence >= 0.80:
+                urgency = "high"
+            else:
+                urgency = "medium"
+            reasons.append("Fishing activity signature detected with empirical fishing evidence")
+
+        elif ais_disabled or raw_type == "potential_dark_vessel" or "gap" in raw_type:
+            refined_type = "potential_dark_vessel"
+            category = "ais_disabling_event"
+            if protected_area or event.confidence >= 0.70:
+                urgency = "high"
+            else:
+                urgency = "medium"
+            reasons.append("AIS transponder gap / dark vessel behavior detected")
+
+        elif loitering or raw_type == "suspicious_loitering_vessel" or "loiter" in raw_type:
+            refined_type = "suspicious_loitering_vessel"
+            category = "marine_loitering"
+            if protected_area and event.confidence >= 0.60:
+                urgency = "medium"
+            elif event.confidence >= 0.70:
+                urgency = "medium"
+            else:
+                urgency = "low"
+            reasons.append("Suspicious vessel loitering pattern detected")
+
+        elif encounter or raw_type == "suspicious_encounter_vessel" or "encounter" in raw_type:
+            refined_type = "suspicious_encounter_vessel"
+            category = "marine_encounter"
+            if protected_area and event.confidence >= 0.60:
+                urgency = "medium"
+            elif event.confidence >= 0.70:
+                urgency = "medium"
+            else:
+                urgency = "low"
+            reasons.append("At-sea vessel encounter / transshipment pattern detected")
+
         else:
-            refined_type = f"unclassified_{raw_type}"
+            refined_type = "suspicious_vessel"
             category = "marine_activity"
-            urgency = "medium"
-            reasons.append(f"Oceanic detection for '{raw_type}'")
+            urgency = "medium" if protected_area else "low"
+            reasons.append(f"General marine vessel observation for '{raw_type}'")
 
     else:
         # Cross-domain fallback

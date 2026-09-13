@@ -1,3 +1,4 @@
+from contextlib import asynccontextmanager
 from typing import Any, Dict, List, Optional
 from fastapi import FastAPI, HTTPException, Query, status
 from fastapi.middleware.cors import CORSMiddleware
@@ -7,6 +8,7 @@ from adapters.fake_events import (
     generate_land_event,
     generate_ocean_event,
 )
+from adapters.ocean_scheduler import ocean_scheduler
 from database.firestore import db_client
 from orchestrator.pipeline import (
     approve_incident,
@@ -16,10 +18,21 @@ from orchestrator.pipeline import (
 )
 from schemas.event import ApprovalRequest, NormalizedEvent, PipelineResult
 
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup: Start background ocean ingestion scheduler safely without duplicates
+    ocean_scheduler.start()
+    yield
+    # Shutdown: Stop worker cleanly
+    ocean_scheduler.stop()
+
+
 app = FastAPI(
     title="EcoSentinel Reasoning Pipeline API",
     description="Person 3's shared, domain-agnostic agentic ecological reasoning backend for EcoSentinel.",
     version="1.0.0",
+    lifespan=lifespan,
 )
 
 # Enable CORS for Person 4's React/Vite + Leaflet dashboard
@@ -72,6 +85,31 @@ def ingest_event(event: NormalizedEvent) -> PipelineResult:
         return result
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Pipeline execution error: {str(e)}")
+
+
+@app.post(
+    "/ingest/ocean",
+    tags=["Ingestion"],
+    summary="Trigger automated ingestion from GFW Ocean API to Person 3 pipeline with deduplication",
+)
+def trigger_ocean_ingestion(
+    mode: str = Query(default="auto", description="Data mode: 'auto', 'live', or 'simulated'"),
+    limit: int = Query(default=10, ge=1, le=50, description="Max events to fetch"),
+) -> Dict[str, Any]:
+    from adapters.ocean_ingest import ingest_ocean_events
+    try:
+        return ingest_ocean_events(mode=mode, limit=limit)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Ocean ingestion error: {str(e)}")
+
+
+@app.get(
+    "/ingest/ocean/status",
+    tags=["Ingestion"],
+    summary="Get status and metrics of the automated ocean background ingestion scheduler",
+)
+def get_ocean_ingest_status() -> Dict[str, Any]:
+    return ocean_scheduler.get_status()
 
 
 @app.get("/events", response_model=List[Dict[str, Any]], tags=["Events"], summary="List processed ecological incidents")

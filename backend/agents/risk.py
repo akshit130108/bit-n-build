@@ -17,27 +17,41 @@ def assess_risk(
     """
     Risk Agent: Evaluates multimodal threat factors to produce an interpretable
     prototype risk score (0-100) and actionable alert level.
-    Incorporates real-time verification and historical spatial-temporal memory.
+    Incorporates sensor verification and historical spatial-temporal memory.
     """
     metadata = event.metadata or {}
     reasons: List[str] = []
     factors: Dict[str, Any] = {}
 
     # 1. Base Threat Factor (max 30 pts)
-    base_threat = 15
     refined = classification.refined_type
     if "poaching" in refined or "blast" in refined:
         base_threat = 30
         reasons.append("Severe wildlife/habitat destruction threat type")
-    elif "logging" in refined or "fishing" in refined:
+    elif "logging" in refined or "illegal_fishing" in refined or "fishing" in refined:
         base_threat = 25
-        reasons.append("High-impact resource extraction threat type")
+        if "illegal_fishing" in refined or "fishing" in refined:
+            reasons.append("High-impact marine resource extraction threat type")
+        else:
+            reasons.append("High-impact resource extraction threat type")
     elif "wildfire" in refined:
         base_threat = 30
         reasons.append("Catastrophic wildfire hazard")
+    elif "dark_vessel" in refined or "gap" in refined:
+        base_threat = 20
+        reasons.append("Suspicious dark vessel AIS gap activity")
     elif "vehicle" in refined:
         base_threat = 20
         reasons.append("Unauthorized vehicular perimeter breach")
+    elif "loitering" in refined:
+        base_threat = 15
+        reasons.append("Suspicious vessel loitering pattern")
+    elif "encounter" in refined:
+        base_threat = 15
+        reasons.append("Suspicious vessel encounter / transshipment pattern")
+    else:
+        base_threat = 10
+        reasons.append(f"Observation activity signature ({refined})")
     factors["base_threat"] = base_threat
 
     # 2. Verification & Sensor Evidence Factor (max 25 pts)
@@ -67,16 +81,9 @@ def assess_risk(
     factors["ecological_sensitivity"] = eco_score
 
     # 4. Nocturnal / Clandestine Timing (max 10 pts)
+    # Strictly require explicit nighttime evidence from source event metadata
     timing_score = 0
-    is_night = metadata.get("is_night", False)
-    # Check if hour is between 20:00 and 05:00 UTC if not explicitly provided
-    if not is_night and hasattr(event, "timestamp") and event.timestamp:
-        try:
-            hour = int(event.timestamp[11:13])
-            if hour >= 20 or hour < 5:
-                is_night = True
-        except Exception:
-            pass
+    is_night = bool(metadata.get("is_night", False))
 
     if is_night:
         timing_score = 8
